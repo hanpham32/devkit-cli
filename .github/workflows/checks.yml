@@ -1,0 +1,56 @@
+name: Checks
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CLICOLOR: 1
+
+jobs:
+  typos:
+    name: Typo Linting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crate-ci/typos@v1.29.7
+        with:
+          config: .github/configs/typos-cli.toml
+
+  check-make-fmt:
+    name: Check make fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4            
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true                                   
+
+      - name: Run make fmt
+        run: make fmt
+
+      - name: Check for formatting diffs
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::make fmt generated changes; please run 'make fmt' and commit the results."
+            git diff
+            exit 1
+          fi                                         
