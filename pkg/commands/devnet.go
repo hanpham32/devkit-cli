@@ -35,8 +35,11 @@ var DevnetCommand = &cli.Command{
 				},
 			}, common.GlobalFlags...),
 			Action: func(cCtx *cli.Context) error {
+				config := cCtx.Context.Value(ConfigContextKey).(*common.EigenConfig)
+
 				if cCtx.Bool("verbose") {
-					log.Printf("Starting devnet...")
+					log.Printf("Starting devnet... ")
+
 					if cCtx.Bool("reset") {
 						log.Printf("Resetting devnet...")
 					}
@@ -47,7 +50,14 @@ var DevnetCommand = &cli.Command{
 						log.Printf("Running in headless mode")
 					}
 					log.Printf("Port: %d", cCtx.Int("port"))
+					chain_image := config.Env["devnet"].ChainImage
+					if chain_image == "" {
+						log.Printf("chain image not provided")
+					} else {
+						log.Printf("Chain Image: %s", chain_image)
+					}
 				}
+
 				log.Printf("Devnet started successfully")
 				return nil
 			},

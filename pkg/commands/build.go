@@ -21,8 +21,13 @@ var BuildCommand = &cli.Command{
 		},*/
 	}, common.GlobalFlags...),
 	Action: func(cCtx *cli.Context) error {
+		cfg := cCtx.Context.Value(ConfigContextKey).(*common.EigenConfig)
 		if cCtx.Bool("verbose") {
+			log.Printf("Project Name: %s", cfg.Project.Name)
 			log.Printf("Building AVS components...")
+			if cCtx.Bool("release") {
+				log.Printf("Building in release mode with image tag: %s", cfg.Release.AVSLogicImageTag)
+			}
 		}
 
 		// Execute make build with Makefile.Devkit
