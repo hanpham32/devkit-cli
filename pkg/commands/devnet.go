@@ -1,9 +1,6 @@
 package commands
 
 import (
-	"devkit-cli/pkg/common"
-	"log"
-
 	"github.com/urfave/cli/v2"
 )
 
@@ -15,7 +12,7 @@ var DevnetCommand = &cli.Command{
 		{
 			Name:  "start",
 			Usage: "Starts Docker containers and deploys local contracts",
-			Flags: append([]cli.Flag{
+			Flags: []cli.Flag{
 				&cli.BoolFlag{
 					Name:  "reset",
 					Usage: "Wipe and restart the devnet from scratch",
@@ -33,46 +30,13 @@ var DevnetCommand = &cli.Command{
 					Usage: "Specify a custom port for local devnet",
 					Value: 8545,
 				},
-			}, common.GlobalFlags...),
-			Action: func(cCtx *cli.Context) error {
-				config := cCtx.Context.Value(ConfigContextKey).(*common.EigenConfig)
-
-				if cCtx.Bool("verbose") {
-					log.Printf("Starting devnet... ")
-
-					if cCtx.Bool("reset") {
-						log.Printf("Resetting devnet...")
-					}
-					if fork := cCtx.String("fork"); fork != "" {
-						log.Printf("Forking from chain: %s", fork)
-					}
-					if cCtx.Bool("headless") {
-						log.Printf("Running in headless mode")
-					}
-					log.Printf("Port: %d", cCtx.Int("port"))
-					chain_image := config.Env["devnet"].ChainImage
-					if chain_image == "" {
-						log.Printf("chain image not provided")
-					} else {
-						log.Printf("Chain Image: %s", chain_image)
-					}
-				}
-
-				log.Printf("Devnet started successfully")
-				return nil
 			},
+			Action: StartDevnetAction,
 		},
 		{
-			Name:  "stop",
-			Usage: "Stops and removes all containers and resources",
-			Flags: append([]cli.Flag{}, common.GlobalFlags...),
-			Action: func(cCtx *cli.Context) error {
-				if cCtx.Bool("verbose") {
-					log.Printf("Stopping devnet...")
-				}
-				log.Printf("Devnet stopped successfully")
-				return nil
-			},
+			Name:   "stop",
+			Usage:  "Stops and removes all containers and resources",
+			Action: StopDevnetAction,
 		},
 	},
 }
