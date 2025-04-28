@@ -70,7 +70,7 @@ version = "0.1.0"
 
 	app := &cli.App{
 		Name:     "test",
-		Commands: []*cli.Command{&tmpCmd},
+		Commands: []*cli.Command{WithTestConfig(&tmpCmd)},
 	}
 
 	// Test cases
@@ -122,7 +122,7 @@ build:
 
 	buildApp := &cli.App{
 		Name:     "test",
-		Commands: []*cli.Command{BuildCommand},
+		Commands: []*cli.Command{WithTestConfig(BuildCommand)},
 	}
 
 	if err := buildApp.Run([]string{"app", "build"}); err != nil {

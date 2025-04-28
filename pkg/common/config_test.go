@@ -79,6 +79,8 @@ func TestLoadEigenConfig_FromCopiedTempFile(t *testing.T) {
 	// Release
 	assert.Equal(t, "some-org/avs-logic:v0.1", cfg.Release.AVSLogicImageTag)
 	assert.False(t, cfg.Release.PushImage)
+	// log
+	assert.Equal(t, "debug", cfg.Log.Level)
 }
 
 func TestLoadEigenConfig_WithAdditionalOperatorSet(t *testing.T) {

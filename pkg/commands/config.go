@@ -24,10 +24,14 @@ var ConfigCommand = &cli.Command{
 		},
 	}, common.GlobalFlags...),
 	Action: func(cCtx *cli.Context) error {
-		if setValue := cCtx.String("set"); setValue != "" {
-			log.Printf("Setting configuration: %s", setValue)
-			// TODO: Parse and apply the key=value update
-			return nil
+		// Load config
+		config, err := common.LoadEigenConfig()
+		if err != nil {
+			return err
+		}
+
+		if common.IsVerboseEnabled(cCtx, config) {
+			log.Printf("Managing project configuration...")
 		}
 
 		// load by default , if --set is not provided
