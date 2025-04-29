@@ -3,11 +3,12 @@ package commands
 import (
 	"devkit-cli/pkg/common"
 	"fmt"
-	"github.com/naoina/toml"
-	"github.com/urfave/cli/v2"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/naoina/toml"
+	"github.com/urfave/cli/v2"
 )
 
 var ConfigCommand = &cli.Command{
@@ -22,6 +23,10 @@ var ConfigCommand = &cli.Command{
 			Name:  "set",
 			Usage: "Set or update a specific configuration key in eigen.toml",
 		},
+		&cli.BoolFlag{
+			Name:  "edit",
+			Usage: "Open eigen.toml in a text editor for manual editing",
+		},
 	}, common.GlobalFlags...),
 	Action: func(cCtx *cli.Context) error {
 		// Load config
@@ -34,8 +39,12 @@ var ConfigCommand = &cli.Command{
 			log.Printf("Managing project configuration...")
 		}
 
-		// load by default , if --set is not provided
-		// dev: If any other subcommand needs to be added in ConfigCommand apart from set and list, handle it above this line.
+		if cCtx.Bool("edit") {
+			log.Printf("Opening config file for editing...")
+			return editConfig(cCtx)
+		}
+
+		// list by default, if no flags are provided
 		log.Println("Displaying current configuration...")
 		projectSetting, err := common.LoadProjectSettings()
 		if err != nil {
