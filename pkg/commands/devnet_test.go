@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"devkit-cli/pkg/common"
 	"fmt"
+	"github.com/stretchr/testify/assert"
+	"github.com/urfave/cli/v2"
 	"io"
 	"net"
 	"os"
@@ -11,9 +13,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/urfave/cli/v2"
 )
 
 // helper to create a temp AVS project dir with eigen.toml copied
