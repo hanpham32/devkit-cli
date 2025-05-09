@@ -2,7 +2,9 @@ package devnet
 
 import (
 	"fmt"
+	"log"
 	"net"
+	"os/exec"
 	"time"
 )
 
@@ -16,4 +18,30 @@ func IsPortAvailable(port int) bool {
 	}
 	_ = conn.Close()
 	return false
+}
+
+// / Stops the container and removes it
+func StopAndRemoveContainer(containerName string) {
+	if err := exec.Command("docker", "stop", containerName).Run(); err != nil {
+		log.Printf("⚠️ Failed to stop container %s: %v", containerName, err)
+	} else {
+		log.Printf("✅ Stopped container %s", containerName)
+	}
+	if err := exec.Command("docker", "rm", containerName).Run(); err != nil {
+		log.Printf("⚠️ Failed to remove container %s: %v", containerName, err)
+	} else {
+		log.Printf("✅ Removed container %s", containerName)
+	}
+}
+
+// GetDockerPsDevnetArgs returns the arguments needed to list all running
+// devkit devnet Docker containers along with their exposed ports.
+// It filters containers by name prefix ("devkit-devnet") and formats
+// the output to show container name and port mappings in a readable form.
+func GetDockerPsDevnetArgs() []string {
+	return []string{
+		"ps",
+		"--filter", "name=devkit-devnet",
+		"--format", "{{.Names}}: {{.Ports}}",
+	}
 }
