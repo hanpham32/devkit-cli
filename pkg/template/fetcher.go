@@ -16,7 +16,9 @@ type Fetcher interface {
 }
 
 type GitFetcher struct {
-	MaxDepth int
+	MaxDepth       int
+	MaxRetries     int
+	MaxConcurrency int
 }
 
 type Submodule struct {
@@ -24,6 +26,11 @@ type Submodule struct {
 	Path   string
 	URL    string
 	Branch string
+}
+
+type SubmoduleFailure struct {
+	mod Submodule
+	err error
 }
 
 type ProgressGrid struct {
@@ -71,6 +78,7 @@ func printLog(format string, args ...any) {
 	if !strings.HasSuffix(output, "\n") {
 		output += "\n"
 	}
+
 	fmt.Print(output)
 }
 
@@ -78,24 +86,13 @@ func printError(format string, args ...any) {
 	outputMu.Lock()
 	defer outputMu.Unlock()
 
-	msg := fmt.Sprintf(format, args...)
-	if !strings.HasSuffix(msg, "\n") {
-		msg += "\n"
+	output := fmt.Sprintf(format, args...)
+	if !strings.HasSuffix(output, "\n") {
+		output += "\n"
 	}
 
 	// ANSI red: \033[31m ... \033[0m
-	fmt.Fprintf(os.Stderr, "\033[31m%s\033[0m", msg)
-}
-
-func printGitError(grid *ProgressGrid, mu *sync.Mutex, modPath, reason string, err error) {
-	// freeze the progressGrid before printing error
-	mu.Lock()
-	renderProgressGrid(grid)
-	grid.frozen = true
-	mu.Unlock()
-
-	// print log with ANSI red formatting wrapper
-	printError("\n❌ %s for %s: %v\n", reason, modPath, err)
+	fmt.Fprintf(os.Stderr, "\033[31m%s\033[0m", output)
 }
 
 func percentToInt(s string) int {
@@ -148,16 +145,6 @@ func renderProgressGrid(grid *ProgressGrid) {
 		bar := buildBar(pct)
 		fmt.Printf("\r\033[K%s %3d%%   %s\n", bar, pct, name)
 	}
-}
-
-func completeGrid(grid *ProgressGrid) {
-	if grid == nil {
-		return
-	}
-	for _, name := range grid.order {
-		grid.progress[name] = 100
-	}
-	renderProgressGrid(grid)
 }
 
 func parseGitHubURL(url string) (repoURL, branch string) {
@@ -274,26 +261,15 @@ func activateSubmodule(repoDir, name string) error {
 	return cmd.Run()
 }
 
-func absorbGitDirs(repoDir string) error {
-	cmd := exec.Command("git", "submodule", "absorbgitdirs")
-	cmd.Dir = repoDir
-	return cmd.Run()
-}
-
 func notExists(path string) bool {
 	_, err := os.Stat(path)
 	return os.IsNotExist(err)
 }
 
 func cloneWithCache(repoURL, branch, cachePath, destPath string, noCache bool, updateProgress func(int)) error {
-	// Lock on the cache path to prevent races
-	lock := lockForRepo(repoURL)
-	lock.Lock()
-	defer lock.Unlock()
-
 	// only pull the repo if cache is missing or noCache is provided
 	if noCache || notExists(cachePath) {
-		if !notExists(cachePath) {
+		if noCache {
 			_ = os.RemoveAll(cachePath)
 		}
 
@@ -308,11 +284,6 @@ func cloneWithCache(repoURL, branch, cachePath, destPath string, noCache bool, u
 }
 
 func copyFromCache(mirrorPath, destPath string, updateProgress func(int)) error {
-	// lock the destination path
-	lock := lockForRepo(destPath)
-	lock.Lock()
-	defer lock.Unlock()
-
 	// proactively clean up before cloning
 	if err := os.RemoveAll(destPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove destPath %s: %w", destPath, err)
@@ -320,7 +291,11 @@ func copyFromCache(mirrorPath, destPath string, updateProgress func(int)) error 
 
 	// perform a clone from the cache to the workingDir
 	cmd := exec.Command("git", "clone", "--dissociate", "--no-hardlinks", "--progress", mirrorPath, destPath)
-
+	// force git to flush stderr early
+	cmd.Env = append(os.Environ(),
+		"GIT_PROGRESS_DELAY=0",
+		"GIT_FLUSH=1",
+	)
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		return err
@@ -394,13 +369,111 @@ func runClone(repoURL, branch string, args []string, dest string, updateProgress
 	return nil
 }
 
-func cloneSubmodules(repoURL string, repoName string, repoDir string, noCache bool, depth int, maxDepth int) error {
+func attemptSubmoduleSetup(mod Submodule, grid *ProgressGrid, repoDir string, cachePath string, workingCopyPath string, commitHash string, noCache bool) error {
+	// intentionally omit branch; we checkout a specific commit immediately after
+	// passing in the Branch could move us to a tree without the commit we want
+	if err := cloneWithCache(mod.URL, "", cachePath, workingCopyPath, noCache, func(pct int) {
+		if pct < 90 {
+			updateProgress(grid, mod.Path, pct)
+			renderProgressGrid(grid)
+		}
+	}); err != nil {
+		return fmt.Errorf("clone: %w", err)
+	}
+
+	// checkout the submodule on the referenced commitHash
+	if err := checkoutCommit(workingCopyPath, commitHash); err != nil {
+		return fmt.Errorf("checkout: %w", err)
+	}
+	// stage the submodule in the parent index at the correct SHA
+	if err := stageSubmodule(workingCopyPath, mod.Path, commitHash); err != nil {
+		return fmt.Errorf("stage: %w", err)
+	}
+
+	// lock against repoDir to guard global state
+	repoLock := lockForRepo(repoDir)
+	repoLock.Lock()
+	defer repoLock.Unlock()
+
+	// set the submodules url in local git config
+	if err := setSubmoduleURL(repoDir, mod.Name, mod.URL); err != nil {
+		return fmt.Errorf("setSubmoduleURL: %w", err)
+	}
+	// mark submodule as active in local config
+	if err := activateSubmodule(repoDir, mod.Name); err != nil {
+		return fmt.Errorf("activateSubmodule: %w", err)
+	}
+
+	// move progress to 100%
+	updateProgress(grid, mod.Path, 100)
+	renderProgressGrid(grid)
+	return nil
+}
+
+func attemptSubmoduleSetups(submodules []Submodule, grid *ProgressGrid, repoDir string, cacheDir string, noCache bool, maxConcurrency int) []SubmoduleFailure {
+	// set up a waitGroup to perform a concurrent fanout and join
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	// record any failures
+	var failures []SubmoduleFailure
+
+	// use buffered channel to bound concurrency
+	sem := make(chan struct{}, maxConcurrency)
+
+	for _, mod := range submodules {
+		// mark that we're waiting on this routine
+		wg.Add(1)
+		// define the routine
+		go func(mod Submodule) {
+			// wait for this goroutine to finish
+			defer wg.Done()
+			// acquire
+			sem <- struct{}{}
+			// defer release
+			defer func() { <-sem }()
+
+			// unpack submodule commit hash from the parent ls-tree
+			commitHash, commitErr := getSubmoduleCommit(repoDir, mod.Path)
+			if commitErr != nil {
+				printLog("failed to get commit for %s: %v\n", mod.Path, commitErr)
+				return
+			}
+			baseName := filepath.Base(mod.Name)
+			cacheName := fmt.Sprintf("%s-%s.git", baseName, commitHash)
+			cachePath := filepath.Join(cacheDir, cacheName)
+			workingCopyPath := filepath.Join(repoDir, mod.Path)
+
+			// lock against workingCopyPath to guard against modules with same path in same parent
+			cloneLock := lockForRepo(workingCopyPath)
+			cloneLock.Lock()
+			defer cloneLock.Unlock()
+
+			// clone, checkout, stage, and register submodule locally
+			err := attemptSubmoduleSetup(mod, grid, repoDir, cachePath, workingCopyPath, commitHash, noCache)
+
+			// record failure if error occurred
+			if err != nil {
+				mu.Lock()
+				failures = append(failures, SubmoduleFailure{mod: mod, err: err})
+				mu.Unlock()
+			}
+		}(mod)
+	}
+	// block until all goroutines call Done()
+	wg.Wait()
+
+	// return SubmoduleFailures
+	return failures
+}
+
+func cloneSubmodules(repoURL string, repoName string, repoDir string, noCache bool, depth int, maxDepth int, maxRetries int, maxConcurrency int) error {
 	// exit early if the maxDepth is exceeded
 	if maxDepth != -1 && depth >= maxDepth {
 		return nil
 	}
 
-	// pull the submodules for this repo
+	// read submodules from .gitmodules
 	submodules, err := listSubmodules(repoDir)
 	if err != nil {
 		return fmt.Errorf("list submodules: %w", err)
@@ -415,7 +488,7 @@ func cloneSubmodules(repoURL string, repoName string, repoDir string, noCache bo
 		return fmt.Errorf("create cache dir: %w", err)
 	}
 
-	// set up a new grid to hold progress
+	// initialize progress grid
 	grid := &ProgressGrid{
 		order:    []string{},
 		progress: map[string]int{},
@@ -429,95 +502,51 @@ func cloneSubmodules(repoURL string, repoName string, repoDir string, noCache bo
 	}
 	printLog("")
 
-	// set up a waitGroup to perform a concurrent fanout and join
-	var wg sync.WaitGroup
-	var mu sync.Mutex
+	// print initial progress
+	renderProgressGrid(grid)
 
-	// for each submodule, perform cloneWithCache and copy to workingCopyPath
-	for _, mod := range submodules {
-		// shadow to avoid race
-		mod := mod
-		// mark that we're waiting on this routine
-		wg.Add(1)
-		// define the routine
-		go func() {
-			// wait for this goroutine to finish
-			defer wg.Done()
+	// initial run
+	failures := attemptSubmoduleSetups(submodules, grid, repoDir, cacheDir, noCache, maxConcurrency)
 
-			// unpack submodule commit hash from the parent ls-tree
-			commitHash, err := getSubmoduleCommit(repoDir, mod.Path)
-			if err != nil {
-				printLog("failed to get commit for %s: %v\n", mod.Path, err)
-				return
-			}
-			baseName := filepath.Base(mod.Name)
-			cacheName := fmt.Sprintf("%s-%s.git", baseName, commitHash)
-			cachePath := filepath.Join(cacheDir, cacheName)
-			workingCopyPath := filepath.Join(repoDir, mod.Path)
+	// retry loop
+	for attempt := 1; attempt <= maxRetries && len(failures) > 0; attempt++ {
+		// set up a new grid to hold progress
+		grid = &ProgressGrid{
+			order:    []string{},
+			progress: map[string]int{},
+		}
+		var retrySubs []Submodule
 
-			// we do not clone from Branch because we immediately checkout the commit ref'd in parents submodule
-			// passing in the Branch could move us to a tree without the commit we want, we can safely ignore it
-			err = cloneWithCache(mod.URL, "", cachePath, workingCopyPath, noCache, func(pct int) {
-				mu.Lock()
-				updateProgress(grid, mod.Path, pct)
-				renderProgressGrid(grid)
-				mu.Unlock()
-			})
-			if err != nil {
-				printGitError(grid, &mu, mod.Path, "clone failed", err)
-				return
-			}
+		// prepare retry list and progress grid
+		printLog("\nRetrying %d failed submodule clones (%d/%d)...\n\n", len(failures), attempt, maxRetries)
 
-			// lock before modifying shared repo state
-			lock := lockForRepo(repoDir)
-			lock.Lock()
-			defer lock.Unlock()
+		// set up grid and submodules for next attempt
+		for _, f := range failures {
+			grid.order = append(grid.order, f.mod.Path)
+			retrySubs = append(retrySubs, f.mod)
+		}
 
-			// checkout the submodule on the referenced commitHash
-			if err := checkoutCommit(workingCopyPath, commitHash); err != nil {
-				printGitError(grid, &mu, mod.Path, "checkout failed", err)
-				return
-			}
-
-			// stage the submodule in the parent index at the correct SHA
-			if err := stageSubmodule(workingCopyPath, mod.Path, commitHash); err != nil {
-				printGitError(grid, &mu, mod.Path, "stage submodule failed", err)
-				return
-			}
-
-			// set the submodules url in local git config
-			if err := setSubmoduleURL(repoDir, mod.Name, mod.URL); err != nil {
-				printGitError(grid, &mu, mod.Path, "set submodule URL failed", err)
-				return
-			}
-
-			// mark submodule as active in local config
-			if err := activateSubmodule(repoDir, mod.Name); err != nil {
-				printGitError(grid, &mu, mod.Path, "activate submodule failed", err)
-				return
-			}
-
-			// absorb .git directories into the parent repo
-			if err := absorbGitDirs(repoDir); err != nil {
-				printGitError(grid, &mu, mod.Path, "absorb git dirs failed", err)
-				return
-			}
-		}()
+		// on subsequent attempts, skip cache and attempt full clone
+		failures = attemptSubmoduleSetups(retrySubs, grid, repoDir, cacheDir, true, maxConcurrency)
 	}
-	// block until all goroutines call Done()
-	wg.Wait()
 
-	// complete this grid
-	completeGrid(grid)
-
-	// guard against duplicate submodules with same name but different paths
-	for _, mod := range submodules {
-		nestedPath := filepath.Join(repoDir, mod.Path)
-		if shouldVisit(nestedPath) {
-			_ = cloneSubmodules(mod.URL, mod.Name, nestedPath, noCache, depth+1, maxDepth)
+	// maxRetries exceeded, report final failure
+	if len(failures) > 0 {
+		printLog("\n")
+		for _, f := range failures {
+			printError("❌ submodule setup failed for %s: %v\n", f.mod.Path, f.err)
 		}
 	}
 
+	// recurse into nested submodules
+	for _, mod := range submodules {
+		nestedPath := filepath.Join(repoDir, mod.Path)
+		if shouldVisit(nestedPath) {
+			_ = cloneSubmodules(mod.URL, mod.Name, nestedPath, noCache, depth+1, maxDepth, maxRetries, maxConcurrency)
+		}
+	}
+
+	// don't halt on error; continue cloning remaining submodules
 	return nil
 }
 
@@ -526,10 +555,13 @@ func (g *GitFetcher) Fetch(templateURL, targetDir string, verbose bool, noCache 
 	repoURL, branch := parseGitHubURL(templateURL)
 	printLog("Cloning template repo: %s → %s\n\n", repoURL, targetDir)
 
+	// get name from the repoUrl
+	templateName := filepath.Base(strings.TrimSuffix(repoURL, ".git"))
+
 	// set up a new grid to hold progress
 	grid := &ProgressGrid{
-		order:    []string{targetDir},
-		progress: map[string]int{targetDir: 0},
+		order:    []string{templateName},
+		progress: map[string]int{templateName: 0},
 	}
 	renderProgressGrid(grid)
 
@@ -540,8 +572,6 @@ func (g *GitFetcher) Fetch(templateURL, targetDir string, verbose bool, noCache 
 		useCache = false
 		printError("⚠️  Warning: couldn't resolve HEAD commit, falling back to direct clone: %v\n", err)
 	}
-	// get name from the repoUrl
-	templateName := filepath.Base(strings.TrimSuffix(repoURL, ".git"))
 
 	// if we can useCache then cloneWithCache
 	if useCache {
@@ -556,7 +586,7 @@ func (g *GitFetcher) Fetch(templateURL, targetDir string, verbose bool, noCache 
 
 		// clone into cache if requested and copy to targetDir
 		if err := cloneWithCache(repoURL, branch, cachePath, targetDir, noCache, func(pct int) {
-			updateProgress(grid, targetDir, pct)
+			updateProgress(grid, templateName, pct)
 			renderProgressGrid(grid)
 		}); err != nil {
 			return fmt.Errorf("clone with cache failed: %w", err)
@@ -564,7 +594,7 @@ func (g *GitFetcher) Fetch(templateURL, targetDir string, verbose bool, noCache 
 	} else {
 		// clone fresh directly to the targetDir
 		err = runClone(repoURL, branch, []string{"--depth=1", "--recurse-submodules=0"}, targetDir, func(pct int) {
-			updateProgress(grid, targetDir, pct)
+			updateProgress(grid, templateName, pct)
 			renderProgressGrid(grid)
 		})
 		if err != nil {
@@ -572,11 +602,8 @@ func (g *GitFetcher) Fetch(templateURL, targetDir string, verbose bool, noCache 
 		}
 	}
 
-	// complete progress in the grid
-	completeGrid(grid)
-
 	// recurse into submodules
-	if err := cloneSubmodules(repoURL, templateName, targetDir, noCache, 0, g.MaxDepth); err != nil {
+	if err := cloneSubmodules(repoURL, templateName, targetDir, noCache, 0, g.MaxDepth, g.MaxRetries, g.MaxConcurrency); err != nil {
 		return fmt.Errorf("submodule clone with cache failed: %w", err)
 	}
 
