@@ -2,15 +2,18 @@ package commands
 
 import (
 	"bytes"
+	"context"
 	"devkit-cli/pkg/common"
+	"devkit-cli/pkg/testutils"
+	"errors"
 	"fmt"
+	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
 	"os"
 	"path/filepath"
 	"regexp"
 	"testing"
-
-	"github.com/stretchr/testify/require"
-	"github.com/urfave/cli/v2"
+	"time"
 )
 
 func TestCreateCommand(t *testing.T) {
@@ -78,7 +81,7 @@ version = "0.1.0"
 
 	app := &cli.App{
 		Name:     "test",
-		Commands: []*cli.Command{WithTestConfig(&tmpCmd)},
+		Commands: []*cli.Command{testutils.WithTestConfig(&tmpCmd)},
 	}
 
 	// Test cases
@@ -141,7 +144,7 @@ build:
 
 	buildApp := &cli.App{
 		Name:     "test",
-		Commands: []*cli.Command{WithTestConfig(BuildCommand)},
+		Commands: []*cli.Command{testutils.WithTestConfig(BuildCommand)},
 	}
 
 	if err := buildApp.Run([]string{"app", "build"}); err != nil {
@@ -235,6 +238,50 @@ func TestConfigCommand_ListOutput(t *testing.T) {
 	require.Contains(t, output, "[project]")
 	require.Contains(t, output, "[operator]")
 	require.Contains(t, output, "[env]")
+}
+
+func TestCreateCommand_ContextCancellation(t *testing.T) {
+	mockToml := `
+[project]
+name = "cancelled-avs"
+version = "0.1.0"
+`
+	if err := os.WriteFile("default.eigen.toml", []byte(mockToml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove("default.eigen.toml")
+
+	origCmd := CreateCommand
+	origCmd.Action = func(cCtx *cli.Context) error {
+		<-cCtx.Context.Done()
+		return cCtx.Context.Err()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	app := &cli.App{
+		Name:     "test",
+		Commands: []*cli.Command{testutils.WithTestConfig(origCmd)},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- app.RunContext(ctx, []string{"app", "create", "cancelled-avs"})
+	}()
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil && errors.Is(err, context.Canceled) {
+			t.Logf("Expected context cancellation received: %v", err)
+		} else {
+			t.Errorf("Expected context cancellation but received: %v", err)
+		}
+	case <-time.After(1 * time.Second):
+		t.Error("Create command did not exit after context cancellation")
+	}
 }
 
 func stripANSI(input string) string {
