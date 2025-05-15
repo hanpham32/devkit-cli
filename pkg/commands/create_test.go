@@ -1,17 +1,15 @@
 package commands
 
 import (
-	"bytes"
 	"context"
 	"devkit-cli/pkg/common"
 	"devkit-cli/pkg/testutils"
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 	"github.com/urfave/cli/v2"
 	"os"
 	"path/filepath"
-	"regexp"
 	"testing"
 	"time"
 )
@@ -19,18 +17,46 @@ import (
 func TestCreateCommand(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create minimal default.eigen.toml
-	mockToml := `
-[project]
-name = "my-avs"
-version = "0.1.0"
+	mockConfigYaml := `
+version: 0.0.1
+config:
+  project:
+    name: "my-avs"
+    version: "0.1.0"
+    context: "devnet"
 `
-	// Create default.eigen.toml in current directory
-	if err := os.WriteFile("default.eigen.toml", []byte(mockToml), 0644); err != nil {
+	configDir := filepath.Join("config")
+	err := os.MkdirAll(configDir, 0755)
+	assert.NoError(t, err)
+
+	// Create config/config.yaml in current directory
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(mockConfigYaml), 0644); err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
-		if err := os.Remove("default.eigen.toml"); err != nil {
+		if err := os.Remove(filepath.Join("config", "config.yaml")); err != nil {
+			t.Logf("Failed to remove test file: %v", err)
+		}
+	}()
+
+	devnetYaml := `
+version: 0.0.1
+config:
+  project:
+    name: "my-avs"
+    version: "0.1.0"
+    context: "devnet"
+`
+	contextsDir := filepath.Join(configDir, "contexts")
+	err = os.MkdirAll(contextsDir, 0755)
+	assert.NoError(t, err)
+
+	// Create config/config.yaml in current directory
+	if err := os.WriteFile(filepath.Join(contextsDir, "devnet.yaml"), []byte(devnetYaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Remove(filepath.Join("config", "contexts", "devnet.yaml")); err != nil {
 			t.Logf("Failed to remove test file: %v", err)
 		}
 	}()
@@ -76,7 +102,7 @@ version = "0.1.0"
 		}
 
 		// Create eigen.toml
-		return copyDefaultTomlToProject(targetDir, projectName, false)
+		return copyDefaultConfigToProject(targetDir, projectName, false)
 	}
 
 	app := &cli.App{
@@ -94,9 +120,9 @@ version = "0.1.0"
 	}
 
 	// Verify file exists
-	eigenTomlPath := filepath.Join(tmpDir, "test-project", "eigen.toml")
+	eigenTomlPath := filepath.Join(tmpDir, "test-project", "config", "config.yaml")
 	if _, err := os.Stat(eigenTomlPath); os.IsNotExist(err) {
-		t.Error("eigen.toml was not created properly")
+		t.Error("config/config.yaml was not created properly")
 	}
 
 	// Verify contracts directory exists
@@ -187,59 +213,6 @@ func TestCreateCommand_WithTemplates(t *testing.T) {
 	t.Logf("Mock templates: main=%s, contracts=%s", mainTemplateURL, contractsTemplateURL)
 }
 
-func TestConfigCommand_ListOutput(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// 📥 Load the default.eigen.toml content
-	defaultTomlPath := filepath.Join("..", "..", "default.eigen.toml") // adjust as needed
-	defaultContent, err := os.ReadFile(defaultTomlPath)
-	require.NoError(t, err)
-
-	// 📝 Write it to test directory as eigen.toml
-	eigenPath := filepath.Join(tmpDir, "eigen.toml")
-	require.NoError(t, os.WriteFile(eigenPath, defaultContent, 0644))
-
-	// 🔁 Change into the test directory
-	originalWD, _ := os.Getwd()
-	defer func() {
-		if err := os.Chdir(originalWD); err != nil {
-			t.Logf("Failed to return to original directory: %v", err)
-		}
-	}()
-	require.NoError(t, os.Chdir(tmpDir))
-
-	// 🧪 Capture os.Stdout
-	var buf bytes.Buffer
-	stdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	// ⚙️ Run the CLI app with nested subcommands
-	app := &cli.App{
-		Commands: []*cli.Command{
-			{
-				Name: "avs",
-				Subcommands: []*cli.Command{
-					ConfigCommand,
-				},
-			},
-		},
-	}
-	err = app.Run([]string{"devkit", "avs", "config", "--list"})
-	require.NoError(t, err)
-
-	// 📤 Finish capturing output
-	w.Close()
-	os.Stdout = stdout
-	_, _ = buf.ReadFrom(r)
-	output := stripANSI(buf.String())
-
-	// ✅ Validating output
-	require.Contains(t, output, "[project]")
-	require.Contains(t, output, "[operator]")
-	require.Contains(t, output, "[env]")
-}
-
 func TestCreateCommand_ContextCancellation(t *testing.T) {
 	mockToml := `
 [project]
@@ -282,9 +255,4 @@ version = "0.1.0"
 	case <-time.After(1 * time.Second):
 		t.Error("Create command did not exit after context cancellation")
 	}
-}
-
-func stripANSI(input string) string {
-	ansi := regexp.MustCompile(`\x1b\[[0-9;]*m`)
-	return ansi.ReplaceAllString(input, "")
 }
