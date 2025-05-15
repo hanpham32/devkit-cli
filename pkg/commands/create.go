@@ -2,15 +2,14 @@ package commands
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"devkit-cli/pkg/common"
-	"devkit-cli/pkg/common/iface"
 	"devkit-cli/pkg/common/logger"
-	"devkit-cli/pkg/common/progress"
 	"devkit-cli/pkg/telemetry"
 	"devkit-cli/pkg/template"
 
@@ -84,7 +83,7 @@ var CreateCommand = &cli.Command{
 		targetDir := filepath.Join(cCtx.String("dir"), projectName)
 
 		// get logger
-		log, tracker := getLogger()
+		log, tracker := common.GetLogger()
 
 		// in verbose mode, detail the situation
 		if cCtx.Bool("verbose") {
@@ -170,6 +169,11 @@ var CreateCommand = &cli.Command{
 			return fmt.Errorf("failed to initialize eigen.toml: %w", err)
 		}
 
+		// Copies the default keystore json files in the keystores/ directory
+		if err := copyDefaultKeystoresToProject(targetDir, cCtx.Bool("verbose")); err != nil {
+			return fmt.Errorf("failed to initialize keystores: %w", err)
+		}
+
 		// Save project settings with telemetry preference
 		telemetryEnabled := !cCtx.Bool("no-telemetry")
 		if err := common.SaveProjectSettings(targetDir, telemetryEnabled); err != nil {
@@ -184,21 +188,6 @@ var CreateCommand = &cli.Command{
 		log.Info("Project %s created successfully in %s. Run 'cd %s' to get started.", projectName, targetDir, targetDir)
 		return nil
 	},
-}
-
-// Get logger for the env we're in
-func getLogger() (iface.Logger, iface.ProgressTracker) {
-	var log iface.Logger
-	var tracker iface.ProgressTracker
-	if progress.IsTTY() {
-		log = logger.NewLogger()
-		tracker = progress.NewTTYProgressTracker(10, os.Stdout)
-	} else {
-		log = logger.NewZapLogger()
-		tracker = progress.NewLogProgressTracker(10, log)
-	}
-
-	return log, tracker
 }
 
 func getTemplateURLs(cCtx *cli.Context) (string, string, error) {
@@ -228,7 +217,7 @@ func getTemplateURLs(cCtx *cli.Context) (string, string, error) {
 
 func createProjectDir(targetDir string, overwrite, verbose bool) error {
 	// get logger
-	log, _ := getLogger()
+	log, _ := common.GetLogger()
 
 	// Check if directory exists and handle overwrite
 	if _, err := os.Stat(targetDir); !os.IsNotExist(err) {
@@ -254,7 +243,7 @@ func createProjectDir(targetDir string, overwrite, verbose bool) error {
 // copyDefaultConfigToProject copies config to the project directory with updated project name
 func copyDefaultConfigToProject(targetDir, projectName string, verbose bool) error {
 	// get logger
-	log, _ := getLogger()
+	log, _ := common.GetLogger()
 
 	// get directories
 	configDir := filepath.Join("config")
@@ -314,10 +303,63 @@ func copyDefaultConfigToProject(targetDir, projectName string, verbose bool) err
 	return nil
 }
 
+// / Creates a keystores directory with default keystore json files
+func copyDefaultKeystoresToProject(targetDir string, verbose bool) error {
+	log, _ := common.GetLogger()
+
+	srcKeystoreDir := "keystores"
+	destKeystoreDir := filepath.Join(targetDir, "keystores")
+
+	// Create the destination keystore directory
+	if err := os.MkdirAll(destKeystoreDir, 0755); err != nil {
+		return fmt.Errorf("failed to create keystores directory: %w", err)
+	}
+	if verbose {
+		log.Info("Created directory: %s", destKeystoreDir)
+	}
+
+	// Read files from the source keystores directory
+	files, err := os.ReadDir(srcKeystoreDir)
+	if err != nil {
+		return fmt.Errorf("failed to read keystores directory: %w", err)
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue // skip subdirectories
+		}
+
+		srcPath := filepath.Join(srcKeystoreDir, file.Name())
+		destPath := filepath.Join(destKeystoreDir, file.Name())
+
+		srcFile, err := os.Open(srcPath)
+		if err != nil {
+			return fmt.Errorf("failed to open source keystore file %s: %w", srcPath, err)
+		}
+		defer srcFile.Close()
+
+		destFile, err := os.Create(destPath)
+		if err != nil {
+			return fmt.Errorf("failed to create destination keystore file %s: %w", destPath, err)
+		}
+		defer destFile.Close()
+
+		if _, err := io.Copy(destFile, srcFile); err != nil {
+			return fmt.Errorf("failed to copy file %s: %w", file.Name(), err)
+		}
+
+		if verbose {
+			log.Info("Copied keystore: %s", file.Name())
+		}
+	}
+
+	return nil
+}
+
 // initGitRepo initializes a new Git repository in the target directory.
 func initGitRepo(ctx *cli.Context, targetDir string, verbose bool) error {
 	// get logger
-	log, _ := getLogger()
+	log, _ := common.GetLogger()
 
 	if verbose {
 		log.Info("Initializing Git repository in %s...", targetDir)

@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"devkit-cli/pkg/commands"
+	"devkit-cli/pkg/commands/keystore"
 	"devkit-cli/pkg/common"
 	devcontext "devkit-cli/pkg/context"
 	"devkit-cli/pkg/hooks"
@@ -20,7 +21,7 @@ func main() {
 		Name:                   "devkit",
 		Usage:                  "EigenLayer Development Kit",
 		Flags:                  common.GlobalFlags,
-		Commands:               []*cli.Command{commands.AVSCommand},
+		Commands:               []*cli.Command{commands.AVSCommand, keystore.KeystoreCommand},
 		UseShortOptionHandling: true,
 	}
 
