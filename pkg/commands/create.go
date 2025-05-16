@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"devkit-cli/config"
-	"devkit-cli/pkg/commands/keystore"
 	"devkit-cli/pkg/common"
 	"devkit-cli/pkg/common/logger"
 	"devkit-cli/pkg/template"
@@ -250,7 +249,7 @@ func copyDefaultConfigToProject(targetDir, projectName string, verbose bool) err
 	}
 
 	// Read config.yaml from config embed and write to target
-	newContent := strings.Replace(config.DefaultConfigYaml, `name = "my-avs"`, fmt.Sprintf(`name = "%s"`, projectName), 1)
+	newContent := strings.Replace(config.DefaultConfigYaml, `name: "my-avs"`, fmt.Sprintf(`name: "%s"`, projectName), 1)
 	err := os.WriteFile(filepath.Join(destConfigDir, common.BaseConfig), []byte(newContent), 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write %s: %w", common.BaseConfig, err)
@@ -298,7 +297,7 @@ func copyDefaultKeystoresToProject(targetDir string, verbose bool) error {
 	}
 
 	// Read files embedded keystore
-	files := keystore.KeystoreEmbeds
+	files := config.KeystoreEmbeds
 
 	// Write files to destKeystoreDir
 	for fileName, file := range files {
