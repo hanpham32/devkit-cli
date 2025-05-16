@@ -3,11 +3,10 @@ package commands
 import (
 	"bytes"
 	"context"
+	"devkit-cli/config"
 	"devkit-cli/pkg/common"
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"github.com/urfave/cli/v2"
 	"io"
 	"net"
 	"os"
@@ -16,8 +15,12 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/urfave/cli/v2"
 )
 
+// helper to create a temp AVS project dir with config.yaml copied
 func createTempAVSProject(t *testing.T, defaultConfigDir string) (string, error) {
 	tempDir, err := os.MkdirTemp("", "devkit-test-avs-*")
 	if err != nil {
@@ -31,10 +34,11 @@ func createTempAVSProject(t *testing.T, defaultConfigDir string) (string, error)
 	}
 
 	// Copy config.yaml
-	srcConfigFile := filepath.Join(defaultConfigDir, "config.yaml")
-	destConfigFile := filepath.Join(destConfigDir, "config.yaml")
-
-	common.CopyFileTesting(t, srcConfigFile, destConfigFile)
+	destConfigFile := filepath.Join(destConfigDir, common.BaseConfig)
+	err = os.WriteFile(destConfigFile, []byte(config.DefaultConfigYaml), 0644)
+	if err != nil {
+		return "", fmt.Errorf("failed to copy %s: %w", common.BaseConfig, err)
+	}
 
 	// Create config/contexts directory
 	destContextsDir := filepath.Join(destConfigDir, "contexts")
@@ -43,10 +47,11 @@ func createTempAVSProject(t *testing.T, defaultConfigDir string) (string, error)
 	}
 
 	// Copy devnet.yaml context file
-	srcDevnetFile := filepath.Join(defaultConfigDir, "contexts", "devnet.yaml")
 	destDevnetFile := filepath.Join(destContextsDir, "devnet.yaml")
-
-	common.CopyFileTesting(t, srcDevnetFile, destDevnetFile)
+	err = os.WriteFile(destDevnetFile, []byte(config.ContextYamls["devnet"]), 0644)
+	if err != nil {
+		return "", fmt.Errorf("failed to create config/contexts/devnet.yaml: %w", err)
+	}
 
 	return tempDir, nil
 }
@@ -104,7 +109,6 @@ func TestStartDevnetOnUsedPort_ShouldFail(t *testing.T) {
 	t.Cleanup(func() {
 		_ = os.Chdir(originalCwd) // Restore cwd after test
 	})
-
 	defaultConfigWithContextConfigPath := filepath.Join("..", "..", "config")
 
 	projectDir1, err := createTempAVSProject(t, defaultConfigWithContextConfigPath)
@@ -180,9 +184,9 @@ func TestListRunningDevnets(t *testing.T) {
 	originalCwd, err := os.Getwd()
 	assert.NoError(t, err)
 	t.Cleanup(func() { _ = os.Chdir(originalCwd) })
+	defaultConfigWithContextConfigPath := filepath.Join("..", "..", "config")
 
 	// Prepare temp AVS project
-	defaultConfigWithContextConfigPath := filepath.Join("..", "..", "config")
 	projectDir, err := createTempAVSProject(t, defaultConfigWithContextConfigPath)
 	assert.NoError(t, err)
 	defer os.RemoveAll(projectDir)
@@ -251,6 +255,7 @@ func TestStopDevnetAll(t *testing.T) {
 	// Prepare and start multiple devnets
 	defaultConfigWithContextConfigPath, _ := filepath.Abs(filepath.Join("..", "..", "config"))
 
+	// Prepare and start multiple devnets
 	for i := 0; i < 2; i++ {
 		projectDir, err := createTempAVSProject(t, defaultConfigWithContextConfigPath)
 		assert.NoError(t, err)
