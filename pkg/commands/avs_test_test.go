@@ -4,21 +4,22 @@ import (
 	"context"
 	"devkit-cli/pkg/common"
 	"errors"
-	"github.com/urfave/cli/v2"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/urfave/cli/v2"
 )
 
-func TestRunCommand(t *testing.T) {
+func TestTestCommand(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a mock Makefile.Devkit
 	mockMakefile := `
-.PHONY: run
-run:
-	@echo "Mock run executed"
+.PHONY: test
+test:
+	@echo "Mock test executed"
 	`
 	if err := os.WriteFile(filepath.Join(tmpDir, common.DevkitMakefile), []byte(mockMakefile), 0644); err != nil {
 		t.Fatal(err)
@@ -40,22 +41,22 @@ run:
 
 	app := &cli.App{
 		Name:     "test",
-		Commands: []*cli.Command{RunCommand},
+		Commands: []*cli.Command{TestCommand},
 	}
 
-	if err := app.Run([]string{"app", "run"}); err != nil {
+	if err := app.Run([]string{"app", "test"}); err != nil {
 		t.Errorf("Failed to execute run command: %v", err)
 	}
 }
 
-func TestCancelledRunCommand(t *testing.T) {
+func TestCancelledTestCommand(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a mock Makefile.Devkit
 	mockMakefile := `
-.PHONY: run
+.PHONY: test
 run:
-	@echo "Mock run executed"
+	@echo "Mock test executed"
 	`
 	if err := os.WriteFile(filepath.Join(tmpDir, common.DevkitMakefile), []byte(mockMakefile), 0644); err != nil {
 		t.Fatal(err)
@@ -78,23 +79,23 @@ run:
 	ctx, cancel := context.WithCancel(context.Background())
 	app := &cli.App{
 		Name:     "test",
-		Commands: []*cli.Command{RunCommand},
+		Commands: []*cli.Command{TestCommand},
 	}
 
 	result := make(chan error)
 	go func() {
-		result <- app.RunContext(ctx, []string{"app", "run"})
+		result <- app.RunContext(ctx, []string{"app", "test"})
 	}()
 	cancel()
 
 	select {
 	case err = <-result:
 		if err != nil && errors.Is(err, context.Canceled) {
-			t.Log("Run exited cleanly after context cancellation")
+			t.Log("Test exited cleanly after context cancellation")
 		} else {
-			t.Errorf("Run returned with error after context cancellation: %v", err)
+			t.Errorf("Test returned with error after context cancellation: %v", err)
 		}
 	case <-time.After(1 * time.Second):
-		t.Error("Run did not exit after context cancellation")
+		t.Error("Test did not exit after context cancellation")
 	}
 }
