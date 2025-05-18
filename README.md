@@ -4,9 +4,9 @@
 
 EigenLayer DevKit streamlines AVS development, enabling you to quickly scaffold projects, compile contracts, run local networks, and simulate tasks with ease.
 
-![EigenLayer DevKit User Flow](assets/devkit-user-flow.png)
+![EigenLayer DevKit User Flow](https://github.com/user-attachments/assets/ae23e3f6-ce92-4204-a223-1ae5369a493b)
 
----
+
 
 ## 🌟 Key Commands Overview
 
@@ -159,7 +159,25 @@ Optionally, submit tasks directly to the on-chain TaskMailBox contract via a fro
 
 ---
 
-## 📖 Logging and Telemetry
+## Bls keystore 
+Create and read keystores for bn254 private keys using the CLI. 
+
+- To create a keystore
+```bash
+devkit keystore create --key --path --password
+```
+
+- To read an existing keystore
+```bash
+devkit keystore read --path --password
+```
+
+### Flag Descriptions
+- **`key`**: Private key in BigInt format . Example: `5581406963073749409396003982472073860082401912942283565679225591782850437460` 
+- **`path`**: Path to the json file. It needs to include the filename . Example: `./keystores/operator1.keystore.json`
+- **`password`**: Password to encrypt/decrypt the keystore.
+
+## 📖 Logging
 
 <!-- 
 @TODO: bring this back when we reintroduce config log levels
