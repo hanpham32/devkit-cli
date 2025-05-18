@@ -174,6 +174,11 @@ var CreateCommand = &cli.Command{
 			return fmt.Errorf("failed to initialize %s: %w", scriptPath, err)
 		}
 
+		// Tidy the logs
+		if cCtx.Bool("verbose") {
+			log.Info("\nFinalising new project\n\n")
+		}
+
 		// Copy config.yaml to the project directory
 		if err := copyDefaultConfigToProject(targetDir, projectName, cCtx.Bool("verbose")); err != nil {
 			return fmt.Errorf("failed to initialize %s: %w", common.BaseConfig, err)
@@ -342,14 +347,29 @@ func initGitRepo(ctx *cli.Context, targetDir string, verbose bool) error {
 	log, _ := common.GetLogger()
 
 	if verbose {
+		log.Info("Removing existing .git directory in %s (if any)...", targetDir)
+	}
+	gitDir := filepath.Join(targetDir, ".git")
+	if err := os.RemoveAll(gitDir); err != nil {
+		return fmt.Errorf("failed to remove existing .git directory: %w", err)
+	}
+
+	if verbose {
 		log.Info("Initializing Git repository in %s...", targetDir)
 	}
+
 	cmd := exec.CommandContext(ctx.Context, "git", "init")
 	cmd.Dir = targetDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git init failed: %w\nOutput: %s", err, string(output))
 	}
+
+	err = os.WriteFile(filepath.Join(targetDir, ".gitignore"), []byte(config.GitIgnore), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write .gitignore: %w", err)
+	}
+
 	if verbose {
 		log.Info("Git repository initialized successfully.")
 		if len(output) > 0 {
