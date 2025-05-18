@@ -162,6 +162,19 @@ var CreateCommand = &cli.Command{
 			}
 		}
 
+		// Set path for .devkit scripts
+		scriptDir := filepath.Join(".devkit", "scripts")
+		scriptPath := filepath.Join(scriptDir, "init")
+
+		// Run init to install deps
+		log.Info("Installing template dependencies\n\n")
+
+		// Run init on the template init script
+		const expectJSONResponse = false
+		if _, err = common.CallTemplateScript(cCtx.Context, targetDir, scriptPath, expectJSONResponse, nil); err != nil {
+			return fmt.Errorf("failed to initialize %s: %w", scriptPath, err)
+		}
+
 		// Copy config.yaml to the project directory
 		if err := copyDefaultConfigToProject(targetDir, projectName, cCtx.Bool("verbose")); err != nil {
 			return fmt.Errorf("failed to initialize %s: %w", common.BaseConfig, err)
@@ -186,7 +199,7 @@ var CreateCommand = &cli.Command{
 			log.Warn("Failed to initialize Git repository in %s: %v", targetDir, err)
 		}
 
-		log.Info("Project %s created successfully in %s. Run 'cd %s' to get started.", projectName, targetDir, targetDir)
+		log.Info("\nProject %s created successfully in %s. Run 'cd %s' to get started.", projectName, targetDir, targetDir)
 		return nil
 	},
 }
