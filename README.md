@@ -1,3 +1,8 @@
+## ⚠️ Warning: This is Alpha, non audited code ⚠️
+Hourglass is in active development and is not yet audited. Use at your own risk.
+
+---
+
 # EigenLayer Development Kit (DevKit) 🚀
 
 **A CLI toolkit for developing, testing, and managing EigenLayer Autonomous Verifiable Services (AVS).**
@@ -5,10 +10,6 @@
 EigenLayer DevKit streamlines AVS development, enabling you to quickly scaffold projects, compile contracts, run local networks, and simulate tasks with ease.
 
 ![EigenLayer DevKit User Flow](assets/devkit-user-flow.png)
-
-## ⚠️ Disclaimer: Closed Alpha Not Production Ready
-EigenLayer DevKit is currently in a closed alpha stage and is intended strictly for local experimentation and development. It has not been audited, and should not be used for use in any live environment, including public testnets or mainnet. Users are strongly discouraged from pushing generated projects to remote repositories without reviewing and sanitizing sensitive configuration files (e.g. devnet.yaml), which may contain private keys or other sensitive material.
-
 
 ## 🌟 Key Commands Overview
 
@@ -39,7 +40,7 @@ Before you begin, ensure you have:
 
 To download a binary for the latest release, run:
 ```bash
-sudo curl -s -L https://s3.amazonaws.com/eigenlayer-devkit-releases/v0.0.4/devkit-darwin-arm64-v0.0.4.tar.gz | sudo tar xvz -C /usr/local/bin
+sudo curl -s -L https://s3.amazonaws.com/eigenlayer-devkit-releases/v0.0.6/devkit-darwin-arm64-v0.0.6.tar.gz | sudo tar xvz -C /usr/local/bin
 ```
 
 The binary will be installed inside the ~/bin directory.
@@ -61,18 +62,6 @@ Verify your installation:
 ```bash
 devkit --help
 ```
-
-### 🔑 Setup for Private Go Modules
-
-During this Private Preview, you'll need access to private Go modules hosted on GitHub:
-
-1. **Add SSH Key to GitHub:** Ensure your SSH key is associated with your GitHub account ([instructions](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account)).
-2. **Verify Repository Access:** Confirm with EigenLabs support that your account has access to necessary private repositories.
-3. **ssh-agent:** Make sure your ssh-agent is running and your SSH key is added. You can do this by running:
-   ```bash
-   [[ -z $(pgrep -f ssh-agent) ]] && eval "$(ssh-agent -s)"
-   ssh-add ~/.ssh/<your github private key>
-   ```
 
 ---
 
