@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -29,8 +30,18 @@ import (
 )
 
 func StartDevnetAction(cCtx *cli.Context) error {
-	logger := common.LoggerFromContext(cCtx.Context)
+
+	// Check if docker is running, else try to start it
+	if err := common.EnsureDockerIsRunning(cCtx); err != nil {
+
+		if errors.Is(err, context.Canceled) {
+			return err // propagate the cancellation directly
+		}
+		return cli.Exit(err.Error(), 1)
+	}
+
 	// Get logger
+	logger := common.LoggerFromContext(cCtx.Context)
 
 	// Extract vars
 	skipAvsRun := cCtx.Bool("skip-avs-run")
@@ -232,6 +243,11 @@ func StartDevnetAction(cCtx *cli.Context) error {
 func DeployContractsAction(cCtx *cli.Context) error {
 	// Get logger
 	logger := common.LoggerFromContext(cCtx.Context)
+	// Check if docker is running, else try to start it
+	err := common.EnsureDockerIsRunning(cCtx)
+	if err != nil {
+		return cli.Exit(err.Error(), 1)
+	}
 
 	// Start timing execution runtime
 	startTime := time.Now()
