@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Layr-Labs/devkit-cli/pkg/common/logger"
+	progresslogger "github.com/Layr-Labs/devkit-cli/pkg/common/logger"
 
 	"github.com/Layr-Labs/devkit-cli/pkg/common"
 	"github.com/Layr-Labs/devkit-cli/pkg/template"
@@ -47,7 +47,8 @@ func createUpgradeCommand(
 		},
 		Action: func(cCtx *cli.Context) error {
 			// Get logger
-			log, tracker := common.GetLogger()
+			logger := common.LoggerFromContext(cCtx.Context)
+			tracker := common.ProgressTrackerFromContext(cCtx.Context)
 
 			// Get the requested version
 			requestedVersion := cCtx.String("version")
@@ -67,7 +68,7 @@ func createUpgradeCommand(
 				if templateBaseURL == "" {
 					return fmt.Errorf("no template URL found in config and no default available")
 				}
-				log.Info("No template URL found in config, using default: %s", templateBaseURL)
+				logger.Info("No template URL found in config, using default: %s", templateBaseURL)
 			}
 
 			// Get project's absolute path
@@ -89,12 +90,12 @@ func createUpgradeCommand(
 			}
 			defer os.RemoveAll(tempCacheDir) // Clean up on exit
 
-			log.Info("Upgrading project template:")
-			log.Info("  Project: %s", projectName)
-			log.Info("  Template URL: %s", templateBaseURL)
-			log.Info("  Current version: %s", currentVersion)
-			log.Info("  Target version: %s", requestedVersion)
-			log.Info("")
+			logger.Info("Upgrading project template:")
+			logger.Info("  Project: %s", projectName)
+			logger.Info("  Template URL: %s", templateBaseURL)
+			logger.Info("  Current version: %s", currentVersion)
+			logger.Info("  Target version: %s", requestedVersion)
+			logger.Info("")
 
 			// Extract base URL without .git suffix for consistency
 			baseRepoURL := strings.TrimSuffix(templateBaseURL, ".git")
@@ -102,15 +103,15 @@ func createUpgradeCommand(
 			// Fetch main template
 			fetcher := &template.GitFetcher{
 				Client: template.NewGitClient(),
-				Logger: *logger.NewProgressLogger(
-					log,
+				Logger: *progresslogger.NewProgressLogger(
+					logger,
 					tracker,
 				),
 				Config: template.GitFetcherConfig{
 					Verbose: cCtx.Bool("verbose"),
 				},
 			}
-			log.Info("Cloning template repository...")
+			logger.Info("Cloning template repository...")
 			if err := fetcher.Fetch(cCtx.Context, baseRepoURL, requestedVersion, tempDir); err != nil {
 				return fmt.Errorf("failed to fetch template from %s with version %s: %w", baseRepoURL, requestedVersion, err)
 			}
@@ -121,10 +122,10 @@ func createUpgradeCommand(
 				return fmt.Errorf("upgrade script not found in template version %s", requestedVersion)
 			}
 
-			log.Info("Running upgrade script...")
+			logger.Info("Running upgrade script...")
 
 			// Execute the upgrade script, passing the project path as an argument
-			_, err = common.CallTemplateScript(cCtx.Context, tempDir, upgradeScriptPath, common.ExpectNonJSONResponse, []byte(absProjectPath))
+			_, err = common.CallTemplateScript(cCtx.Context, logger, tempDir, upgradeScriptPath, common.ExpectNonJSONResponse, []byte(absProjectPath))
 			if err != nil {
 				return fmt.Errorf("upgrade script execution failed: %w", err)
 			}
@@ -151,7 +152,7 @@ func createUpgradeCommand(
 					if _, ok := projectMap["templateBaseUrl"]; !ok {
 						// Use the non-.git version for the config
 						projectMap["templateBaseUrl"] = strings.TrimSuffix(baseRepoURL, ".git")
-						log.Info("Added missing template URL to config")
+						logger.Info("Added missing template URL to config")
 					}
 				}
 			}
@@ -167,9 +168,9 @@ func createUpgradeCommand(
 				return fmt.Errorf("failed to write updated config: %w", err)
 			}
 
-			log.Info("")
-			log.Info("Template upgrade completed successfully!")
-			log.Info("Project is now using template version: %s", requestedVersion)
+			logger.Info("")
+			logger.Info("Template upgrade completed successfully!")
+			logger.Info("Project is now using template version: %s", requestedVersion)
 
 			return nil
 		},
