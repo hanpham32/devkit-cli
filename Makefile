@@ -40,6 +40,10 @@ lint: ## Run linter
 install: build ## Install binary to ~/bin
 	@mkdir -p ~/bin
 	@cp $(BIN)/$(APP_NAME) ~/bin/
+	@if ! npm list -g @layr-labs/zeus@1.5.2 >/dev/null 2>&1; then \
+		echo "Installing @layr-labs/zeus@1.5.2..."; \
+		npm install -g @layr-labs/zeus@1.5.2; \
+	fi
 
 clean: ## Remove binary
 	@rm -f $(APP_NAME) ~/bin/$(APP_NAME) 

@@ -164,6 +164,11 @@ var CreateCommand = &cli.Command{
 			return fmt.Errorf("failed to initialize keystores: %w", err)
 		}
 
+		// Copies the default .zeus file in the .zeus/ directory
+		if err := copyZeusFileToProject(logger, targetDir); err != nil {
+			return fmt.Errorf("failed to initialize .zeus: %w", err)
+		}
+
 		// Write the example .env file
 		err = os.WriteFile(filepath.Join(targetDir, ".env.example"), []byte(config.EnvExample), 0644)
 		if err != nil {
@@ -341,6 +346,23 @@ func copyDefaultKeystoresToProject(logger iface.Logger, targetDir string) error 
 
 		logger.Debug("Copied keystore: %s", fileName)
 	}
+
+	return nil
+}
+
+// Copies the .zeus file to the project directory
+func copyZeusFileToProject(logger iface.Logger, targetDir string) error {
+	// Destination .zeus file path
+	destZeusPath := filepath.Join(targetDir, common.ZeusConfig)
+
+	// Read the embedded zeus config
+	zeusConfigContent := config.ZeusConfig
+
+	if err := os.WriteFile(destZeusPath, []byte(zeusConfigContent), 0644); err != nil {
+		return fmt.Errorf("failed to write file %s: %w", common.ZeusConfig, err)
+	}
+
+	logger.Debug("Copied zeus config: %s", common.ZeusConfig)
 
 	return nil
 }
