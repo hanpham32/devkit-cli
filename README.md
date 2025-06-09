@@ -90,6 +90,52 @@ Verify your installation:
 devkit --help
 ```
 
+### 🔧 Shell Completion (Optional)
+
+Tab completion for devkit commands is automatically set up when you install with `make install`.
+
+**If you installed from source with `make install`:**
+- Completion is automatically configured and enabled! Test it immediately:
+```bash
+devkit <TAB>          # Should show: avs, keystore, version
+devkit avs <TAB>      # Should show subcommands
+```
+
+**If you downloaded the binary directly, manual setup:**
+
+**For Zsh (recommended for macOS):**
+```bash
+# Add to your ~/.zshrc:
+PROG=devkit
+source <(curl -s https://raw.githubusercontent.com/Layr-Labs/devkit-cli/main/autocomplete/zsh_autocomplete)
+
+exec zsh
+```
+
+**For Bash:**
+```bash
+# Add to your ~/.bashrc or ~/.bash_profile:
+PROG=devkit
+source <(curl -s https://raw.githubusercontent.com/Layr-Labs/devkit-cli/main/autocomplete/bash_autocomplete)
+
+source ~/.bashrc
+```
+
+**For local development/testing:**
+```bash
+# If you have the devkit-cli repo locally
+cd /path/to/devkit-cli
+PROG=devkit source autocomplete/zsh_autocomplete  # for zsh
+PROG=devkit source autocomplete/bash_autocomplete # for bash
+```
+
+After setup, you can use tab completion:
+```bash
+devkit <TAB>          # Shows: avs, keystore, version
+devkit avs <TAB>      # Shows: create, config, context, build, devnet, run, call, release, template
+devkit avs cr<TAB>    # Completes to: devkit avs create
+```
+
 ---
 
 ## 🚧 Step-by-Step Guide
