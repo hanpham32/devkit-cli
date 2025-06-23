@@ -144,6 +144,40 @@ func Migration_0_0_5_to_0_0_6(user, old, new *yaml.Node) (*yaml.Node, error) {
 		}
 	}
 
+	// Add artifacts at the end
+	if contextNode != nil && contextNode.Kind == yaml.MappingNode {
+		// --- Artifacts (at the end) ---
+		artifactsKey := &yaml.Node{
+			Kind:        yaml.ScalarNode,
+			Value:       "artifacts",
+			HeadComment: "# Release artifacts",
+		}
+		artifactsValue := &yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Value: "component", Tag: "!!str"},
+				{Kind: yaml.ScalarNode, Value: "", Tag: "!!str"},
+				{Kind: yaml.ScalarNode, Value: "artifactId", Tag: "!!str"},
+				{Kind: yaml.ScalarNode, Value: "", Tag: "!!str"},
+				{Kind: yaml.ScalarNode, Value: "digest", Tag: "!!str"},
+				{Kind: yaml.ScalarNode, Value: "", Tag: "!!str"},
+				{Kind: yaml.ScalarNode, Value: "registry_url", Tag: "!!str"},
+				{Kind: yaml.ScalarNode, Value: "", Tag: "!!str"},
+			},
+		}
+		// Only add artifacts if not present
+		foundArtifacts := false
+		for i := 0; i < len(contextNode.Content)-1; i += 2 {
+			if contextNode.Content[i].Value == "artifacts" {
+				foundArtifacts = true
+				break
+			}
+		}
+		if !foundArtifacts {
+			contextNode.Content = append(contextNode.Content, artifactsKey, artifactsValue)
+		}
+	}
+
 	// Check if transporter already exists
 	hasTransporter := false
 	for i := 0; i < len(contextNode.Content)-1; i += 2 {

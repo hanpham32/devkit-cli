@@ -89,6 +89,7 @@ type EigenLayerL1Config struct {
 	BN254TableCalculator string `json:"bn254_table_calculator" yaml:"bn254_table_calculator"`
 	CrossChainRegistry   string `json:"cross_chain_registry" yaml:"cross_chain_registry"`
 	KeyRegistrar         string `json:"key_registrar" yaml:"key_registrar"`
+	ReleaseManager       string `json:"release_manager" yaml:"release_manager"`
 }
 
 type EigenLayerL2Config struct {
@@ -144,6 +145,14 @@ type Transporter struct {
 	BlsPrivateKey string `json:"bls_private_key" yaml:"bls_private_key"`
 }
 
+// ArtifactsConfig defines the structure for release artifacts
+type ArtifactsConfig struct {
+	Component   string `json:"component" yaml:"component"`
+	ArtifactId  string `json:"artifactId" yaml:"artifactId"`
+	Digest      string `json:"digest" yaml:"digest"`
+	RegistryUrl string `json:"registry_url" yaml:"registry_url"`
+}
+
 type ChainContextConfig struct {
 	Name                  string                 `json:"name" yaml:"name"`
 	Chains                map[string]ChainConfig `json:"chains" yaml:"chains"`
@@ -157,6 +166,7 @@ type ChainContextConfig struct {
 	OperatorSets          []OperatorSet          `json:"operator_sets" yaml:"operator_sets"`
 	OperatorRegistrations []OperatorRegistration `json:"operator_registrations" yaml:"operator_registrations"`
 	Stakers               []StakerSpec           `json:"stakers" yaml:"stakers"`
+	Artifacts             *ArtifactsConfig       `json:"artifacts" yaml:"artifacts"`
 }
 
 func LoadBaseConfig() (map[string]interface{}, error) {
