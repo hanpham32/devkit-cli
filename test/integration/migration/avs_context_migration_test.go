@@ -1,6 +1,7 @@
 package migration_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/Layr-Labs/devkit-cli/config/contexts"
@@ -432,24 +433,217 @@ func TestAVSContextMigration_0_0_4_to_0_0_5(t *testing.T) {
 	})
 }
 
-// TestAVSContextMigration_FullChain tests migrating through the entire chain from 0.0.1 to 0.0.5
+// TestAVSContextMigration_0_0_5_to_0_0_6 tests the migration from version 0.0.5 to 0.0.6
+// which updates fork blocks, adds strategy_manager, and converts stake to allocations
+func TestAVSContextMigration_0_0_5_to_0_0_6(t *testing.T) {
+	// Use the embedded v0.0.5 content as our starting point
+	userYAML := string(contexts.ContextYamls["0.0.5"])
+
+	userNode := testNode(t, userYAML)
+
+	// Get the actual migration step
+	var migrationStep migration.MigrationStep
+	for _, step := range contexts.MigrationChain {
+		if step.From == "0.0.5" && step.To == "0.0.6" {
+			migrationStep = step
+			break
+		}
+	}
+	if migrationStep.Apply == nil {
+		t.Fatal("Could not find 0.0.5 -> 0.0.6 migration step")
+	}
+
+	// Execute migration
+	migrationChain := []migration.MigrationStep{migrationStep}
+	migratedNode, err := migration.MigrateNode(userNode, "0.0.5", "0.0.6", migrationChain)
+	if err != nil {
+		t.Fatalf("Migration failed: %v", err)
+	}
+
+	// Verify results
+	t.Run("version updated", func(t *testing.T) {
+		version := migration.ResolveNode(migratedNode, []string{"version"})
+		if version == nil || version.Value != "0.0.6" {
+			t.Errorf("Expected version to be updated to 0.0.6, got %v", version.Value)
+		}
+	})
+
+	t.Run("fork blocks updated", func(t *testing.T) {
+		l1Block := migration.ResolveNode(migratedNode, []string{"context", "chains", "l1", "fork", "block"})
+		if l1Block == nil || l1Block.Value != "4017700" {
+			t.Errorf("Expected L1 fork block to be updated to 4017700, got %v", l1Block.Value)
+		}
+
+		l2Block := migration.ResolveNode(migratedNode, []string{"context", "chains", "l2", "fork", "block"})
+		if l2Block == nil || l2Block.Value != "4017700" {
+			t.Errorf("Expected L2 fork block to be updated to 4017700, got %v", l2Block.Value)
+		}
+	})
+
+	t.Run("strategy_manager added to eigenlayer L1", func(t *testing.T) {
+		strategyMgr := migration.ResolveNode(migratedNode, []string{"context", "eigenlayer", "l1", "strategy_manager"})
+		if strategyMgr == nil || strategyMgr.Value != "0xdfB5f6CE42aAA7830E94ECFCcAd411beF4d4D5b6" {
+			t.Errorf("Expected strategy_manager to be added to L1, got %v", strategyMgr.Value)
+		}
+	})
+
+	t.Run("operators converted from stake to allocations", func(t *testing.T) {
+		// Check that operator 0 (first operator) has allocations structure
+		allocations := migration.ResolveNode(migratedNode, []string{"context", "operators", "0", "allocations"})
+		if allocations == nil {
+			t.Error("Expected operator 0 to have allocations structure")
+			return
+		}
+
+		// Check first allocation details
+		strategyAddr := migration.ResolveNode(migratedNode, []string{"context", "operators", "0", "allocations", "0", "strategy_address"})
+		if strategyAddr == nil || strategyAddr.Value != "0x7D704507b76571a51d9caE8AdDAbBFd0ba0e63d3" {
+			t.Errorf("Expected stETH strategy address, got %v", strategyAddr.Value)
+		}
+
+		strategyName := migration.ResolveNode(migratedNode, []string{"context", "operators", "0", "allocations", "0", "name"})
+		if strategyName == nil || strategyName.Value != "stETH_Strategy" {
+			t.Errorf("Expected strategy name to be stETH_Strategy, got %v", strategyName.Value)
+		}
+		// Check operator set allocation
+		opSetAlloc := migration.ResolveNode(migratedNode, []string{"context", "operators", "0", "allocations", "0", "operator_set_allocations", "0", "operator_set"})
+		if opSetAlloc == nil || opSetAlloc.Value != "0" {
+			t.Errorf("Expected operator set to be 0, got %v", opSetAlloc.Value)
+		}
+
+		allocationWads := migration.ResolveNode(migratedNode, []string{"context", "operators", "0", "allocations", "0", "operator_set_allocations", "0", "allocation_in_wads"})
+		if allocationWads == nil || allocationWads.Value != "500000000000000000" {
+			t.Errorf("Expected allocation in wads to be 500000000000000000, got %v", allocationWads.Value)
+		}
+	})
+
+	t.Run("stake field removed from operators", func(t *testing.T) {
+		// The migration replaces entire operator structures, but may leave empty stake fields
+		for i := 0; i < 5; i++ {
+			stake := migration.ResolveNode(migratedNode, []string{"context", "operators", fmt.Sprintf("%d", i), "stake"})
+			if stake != nil && stake.Value != "" {
+				t.Errorf("Expected stake field to be removed or empty for operator %d, but got value %v", i, stake.Value)
+			}
+		}
+	})
+
+	t.Run("operator 1 has stETH allocation", func(t *testing.T) {
+		// Check that operator 1 also has stETH strategy allocation (same as operator 0)
+		strategyAddr := migration.ResolveNode(migratedNode, []string{"context", "operators", "1", "allocations", "0", "strategy_address"})
+		if strategyAddr == nil || strategyAddr.Value != "0x7D704507b76571a51d9caE8AdDAbBFd0ba0e63d3" {
+			t.Errorf("Expected stETH strategy address for operator 1, got %v", strategyAddr.Value)
+		}
+
+		strategyName := migration.ResolveNode(migratedNode, []string{"context", "operators", "1", "allocations", "0", "name"})
+		if strategyName == nil || strategyName.Value != "stETH_Strategy" {
+			t.Errorf("Expected strategy name to be stETH_Strategy for operator 1, got %v", strategyName.Value)
+		}
+	})
+
+	t.Run("operators 2-4 have no meaningful allocations", func(t *testing.T) {
+		// Operators 2, 3, 4 should have no meaningful allocations
+		for i := 2; i < 5; i++ {
+			allocations := migration.ResolveNode(migratedNode, []string{"context", "operators", fmt.Sprintf("%d", i), "allocations"})
+			if allocations != nil {
+				// If allocations exist, check that they're empty (no items in the sequence)
+				if allocations.Kind == yaml.SequenceNode && len(allocations.Content) > 0 {
+					t.Errorf("Expected operator %d to have empty allocations, but got %d items", i, len(allocations.Content))
+				}
+			}
+
+			// But they should still be there as operator objects
+			operator := migration.ResolveNode(migratedNode, []string{"context", "operators", fmt.Sprintf("%d", i)})
+			if operator == nil {
+				t.Errorf("Expected operator %d to still exist", i)
+			}
+		}
+	})
+
+	t.Run("eigenlayer converted to L1/L2 structure", func(t *testing.T) {
+		// Check that eigenlayer now has L1/L2 structure
+		allocationMgr := migration.ResolveNode(migratedNode, []string{"context", "eigenlayer", "l1", "allocation_manager"})
+		if allocationMgr == nil || allocationMgr.Value != "0xFdD5749e11977D60850E06bF5B13221Ad95eb6B4" {
+			t.Errorf("Expected allocation_manager in L1 structure, got %v", allocationMgr.Value)
+		}
+
+		delegationMgr := migration.ResolveNode(migratedNode, []string{"context", "eigenlayer", "l1", "delegation_manager"})
+		if delegationMgr == nil || delegationMgr.Value != "0x75dfE5B44C2E530568001400D3f704bC8AE350CC" {
+			t.Errorf("Expected delegation_manager in L1 structure, got %v", delegationMgr.Value)
+		}
+
+		// Check L2 contracts exist
+		certVerifier := migration.ResolveNode(migratedNode, []string{"context", "eigenlayer", "l2", "bn254_certificate_verifier"})
+		if certVerifier == nil || certVerifier.Value != "0xf462d03A82C1F3496B0DFe27E978318eD1720E1f" {
+			t.Errorf("Expected bn254_certificate_verifier in L2 structure, got %v", certVerifier.Value)
+		}
+
+		// Check that operator sets are preserved
+		operatorSets := migration.ResolveNode(migratedNode, []string{"context", "operator_sets"})
+		if operatorSets == nil {
+			t.Error("Expected operator_sets section to be preserved")
+		}
+	})
+
+	t.Run("transporter section added with expected keys", func(t *testing.T) {
+		schedule := migration.ResolveNode(migratedNode, []string{"context", "transporter", "schedule"})
+		if schedule == nil || schedule.Value != "0 */2 * * *" {
+			t.Errorf("Expected schedule '0 */2 * * *', got %v", schedule.Value)
+		}
+		privKey := migration.ResolveNode(migratedNode, []string{"context", "transporter", "private_key"})
+		if privKey == nil {
+			t.Error("Expected private_key field to be present")
+		}
+		blsPrivKey := migration.ResolveNode(migratedNode, []string{"context", "transporter", "bls_private_key"})
+		if blsPrivKey == nil {
+			t.Error("Expected bls_private_key field to be present")
+		}
+	})
+
+	t.Run("transporter inserted after chains", func(t *testing.T) {
+		ctxNode := migration.ResolveNode(migratedNode, []string{"context"})
+		if ctxNode == nil || ctxNode.Kind != yaml.MappingNode {
+			t.Fatal("context node not found or invalid")
+		}
+		var keys []string
+		for i := 0; i < len(ctxNode.Content)-1; i += 2 {
+			keys = append(keys, ctxNode.Content[i].Value)
+		}
+		chainsIdx, transpIdx := -1, -1
+		for i, key := range keys {
+			if key == "chains" {
+				chainsIdx = i
+			}
+			if key == "transporter" {
+				transpIdx = i
+			}
+		}
+		if chainsIdx == -1 || transpIdx == -1 {
+			t.Fatal("chains or transporter key missing in context")
+		}
+		if transpIdx <= chainsIdx {
+			t.Errorf("Expected transporter to appear after chains, got chains at %d, transporter at %d", chainsIdx, transpIdx)
+		}
+	})
+}
+
+// TestAVSContextMigration_FullChain tests migrating through the entire chain from 0.0.1 to 0.0.6
 func TestAVSContextMigration_FullChain(t *testing.T) {
 	// Use the embedded v0.0.1 content as our starting point
 	userYAML := string(contexts.ContextYamls["0.0.1"])
 
 	userNode := testNode(t, userYAML)
 
-	// Execute migration through the entire chain
-	migratedNode, err := migration.MigrateNode(userNode, "0.0.1", "0.0.5", contexts.MigrationChain)
+	// Execute migration through the entire chain to 0.0.6 (where stake conversion happens)
+	migratedNode, err := migration.MigrateNode(userNode, "0.0.1", "0.0.6", contexts.MigrationChain)
 	if err != nil {
 		t.Fatalf("Full chain migration failed: %v", err)
 	}
 
 	// Verify final state
-	t.Run("final version is 0.0.5", func(t *testing.T) {
+	t.Run("final version is 0.0.6", func(t *testing.T) {
 		version := migration.ResolveNode(migratedNode, []string{"version"})
-		if version == nil || version.Value != "0.0.5" {
-			t.Errorf("Expected final version to be 0.0.5, got %v", version.Value)
+		if version == nil || version.Value != "0.0.6" {
+			t.Errorf("Expected final version to be 0.0.6, got %v", version.Value)
 		}
 	})
 
@@ -471,13 +665,26 @@ func TestAVSContextMigration_FullChain(t *testing.T) {
 		if deployedContracts == nil {
 			t.Error("Expected deployed_contracts section to be added")
 		}
+
+		// Check that strategy_manager was added (from 0.0.5→0.0.6)
+		strategyManager := migration.ResolveNode(migratedNode, []string{"context", "eigenlayer", "l1", "strategy_manager"})
+		if strategyManager == nil {
+			t.Error("Expected strategy_manager to be added to L1 structure")
+		}
 	})
 
-	t.Run("user customizations preserved", func(t *testing.T) {
-		// User's custom stake should be preserved
+	t.Run("stake converted to allocations", func(t *testing.T) {
+		// Check that the original stake was converted to allocations structure
+		allocations := migration.ResolveNode(migratedNode, []string{"context", "operators", "0", "allocations"})
+		if allocations == nil {
+			t.Error("Expected operator to have allocations structure after full migration")
+			return
+		}
+
+		// Verify stake field is completely removed or empty
 		stake := migration.ResolveNode(migratedNode, []string{"context", "operators", "0", "stake"})
-		if stake == nil || stake.Value != "1000ETH" {
-			t.Errorf("Expected user's stake to be preserved, got %v", stake.Value)
+		if stake != nil && stake.Value != "" {
+			t.Errorf("Expected stake field to be removed or empty after migration, but got %v", stake.Value)
 		}
 	})
 }

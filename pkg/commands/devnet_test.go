@@ -47,9 +47,10 @@ func TestStartAndStopDevnet(t *testing.T) {
 		&cli.IntFlag{Name: "port"},
 		&cli.BoolFlag{Name: "verbose"},
 		&cli.BoolFlag{Name: "skip-deploy-contracts"},
+		&cli.BoolFlag{Name: "skip-transporter"},
 	}, StartDevnetAction)
 
-	err = startApp.Run([]string{"devkit", "--port", port, "--verbose", "--skip-deploy-contracts"})
+	err = startApp.Run([]string{"devkit", "--port", port, "--verbose", "--skip-deploy-contracts", "--skip-transporter"})
 	assert.NoError(t, err)
 
 	// Stop
@@ -89,9 +90,10 @@ func TestStartDevnetOnUsedPort_ShouldFail(t *testing.T) {
 		&cli.IntFlag{Name: "port"},
 		&cli.BoolFlag{Name: "verbose"},
 		&cli.BoolFlag{Name: "skip-deploy-contracts"},
+		&cli.BoolFlag{Name: "skip-transporter"},
 	}, StartDevnetAction)
 
-	err = app1.Run([]string{"devkit", "--port", port, "--verbose", "--skip-deploy-contracts"})
+	err = app1.Run([]string{"devkit", "--port", port, "--verbose", "--skip-deploy-contracts", "--skip-transporter"})
 	assert.NoError(t, err)
 
 	// Attempt from dir2
@@ -102,9 +104,10 @@ func TestStartDevnetOnUsedPort_ShouldFail(t *testing.T) {
 		&cli.IntFlag{Name: "port"},
 		&cli.BoolFlag{Name: "verbose"},
 		&cli.BoolFlag{Name: "skip-deploy-contracts"},
+		&cli.BoolFlag{Name: "skip-transporter"},
 	}, StartDevnetAction)
 
-	err = app2.Run([]string{"devkit", "--port", port, "--verbose", "--skip-deploy-contracts"})
+	err = app2.Run([]string{"devkit", "--port", port, "--verbose", "--skip-deploy-contracts", "--skip-transporter"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already in use")
 
@@ -138,11 +141,12 @@ func TestStartDevnet_WithDeployContracts(t *testing.T) {
 		&cli.IntFlag{Name: "port"},
 		&cli.BoolFlag{Name: "verbose"},
 		&cli.BoolFlag{Name: "skip-deploy-contracts"},
+		&cli.BoolFlag{Name: "skip-transporter"},
 		&cli.BoolFlag{Name: "skip-setup"},
 	}, StartDevnetAction)
 
 	// Use --skip-setup to avoid AVS setup steps while still deploying contracts
-	err = app.Run([]string{"devkit", "--port", port, "--skip-setup"})
+	err = app.Run([]string{"devkit", "--port", port, "--skip-setup", "--skip-transporter"})
 	assert.NoError(t, err)
 
 	yamlPath := filepath.Join("config", "contexts", "devnet.yaml")
@@ -184,9 +188,10 @@ func TestStartDevnet_SkipDeployContracts(t *testing.T) {
 		&cli.IntFlag{Name: "port"},
 		&cli.BoolFlag{Name: "verbose"},
 		&cli.BoolFlag{Name: "skip-deploy-contracts"},
+		&cli.BoolFlag{Name: "skip-transporter"},
 	}, StartDevnetAction)
 
-	err = app.Run([]string{"devkit", "--port", port, "--skip-deploy-contracts"})
+	err = app.Run([]string{"devkit", "--port", port, "--skip-deploy-contracts", "--skip-transporter"})
 	assert.NoError(t, err)
 
 	yamlPath := filepath.Join("config", "contexts", "devnet.yaml")
@@ -229,10 +234,11 @@ func TestStartDevnet_SkipAVSRun(t *testing.T) {
 		&cli.IntFlag{Name: "port"},
 		&cli.BoolFlag{Name: "verbose"},
 		&cli.BoolFlag{Name: "skip-setup"},
+		&cli.BoolFlag{Name: "skip-transporter"},
 		&cli.BoolFlag{Name: "skip-avs-run"},
 	}, StartDevnetAction)
 
-	err = app.Run([]string{"devkit", "--port", port, "--skip-setup", "--skip-avs-run"})
+	err = app.Run([]string{"devkit", "--port", port, "--skip-setup", "--skip-transporter", "--skip-avs-run"})
 	assert.NoError(t, err)
 
 	yamlPath := filepath.Join("config", "contexts", "devnet.yaml")
@@ -288,8 +294,9 @@ func TestListRunningDevnets(t *testing.T) {
 		&cli.IntFlag{Name: "port"},
 		&cli.BoolFlag{Name: "verbose"},
 		&cli.BoolFlag{Name: "skip-deploy-contracts"},
+		&cli.BoolFlag{Name: "skip-transporter"},
 	}, StartDevnetAction)
-	err = startApp.Run([]string{"devkit", "--port", port, "--skip-deploy-contracts"})
+	err = startApp.Run([]string{"devkit", "--port", port, "--skip-deploy-contracts", "--skip-transporter"})
 	assert.NoError(t, err)
 
 	// Capture output of list
@@ -343,9 +350,10 @@ func TestStopDevnetAll(t *testing.T) {
 		startApp, _ := testutils.CreateTestAppWithNoopLoggerAndAccess("devkit", []cli.Flag{
 			&cli.IntFlag{Name: "port"},
 			&cli.BoolFlag{Name: "skip-deploy-contracts"},
+			&cli.BoolFlag{Name: "skip-transporter"},
 		}, StartDevnetAction)
 
-		err = startApp.Run([]string{"devkit", "--port", port, "--skip-deploy-contracts"})
+		err = startApp.Run([]string{"devkit", "--port", port, "--skip-deploy-contracts", "--skip-transporter"})
 		assert.NoError(t, err)
 	}
 
@@ -400,9 +408,10 @@ func TestStopDevnetContainerFlag(t *testing.T) {
 	startApp, _ := testutils.CreateTestAppWithNoopLoggerAndAccess("devkit", []cli.Flag{
 		&cli.IntFlag{Name: "port"},
 		&cli.BoolFlag{Name: "skip-deploy-contracts"},
+		&cli.BoolFlag{Name: "skip-transporter"},
 	}, StartDevnetAction)
 
-	err = startApp.Run([]string{"devkit", "--port", port, "--skip-deploy-contracts"})
+	err = startApp.Run([]string{"devkit", "--port", port, "--skip-deploy-contracts", "--skip-transporter"})
 	assert.NoError(t, err)
 
 	// Create stop command with no-op logger
@@ -458,8 +467,9 @@ func TestDeployContracts(t *testing.T) {
 		&cli.IntFlag{Name: "port"},
 		&cli.BoolFlag{Name: "verbose"},
 		&cli.BoolFlag{Name: "skip-deploy-contracts"},
+		&cli.BoolFlag{Name: "skip-transporter"},
 	}, StartDevnetAction)
-	err = startApp.Run([]string{"devkit", "--port", port, "--skip-deploy-contracts"})
+	err = startApp.Run([]string{"devkit", "--port", port, "--skip-deploy-contracts", "--skip-transporter"})
 	assert.NoError(t, err)
 
 	// Run deploy-contracts
@@ -631,11 +641,12 @@ func TestStartDevnet_ContextCancellation(t *testing.T) {
 		&cli.IntFlag{Name: "port"},
 		&cli.BoolFlag{Name: "verbose"},
 		&cli.BoolFlag{Name: "skip-deploy-contracts"},
+		&cli.BoolFlag{Name: "skip-transporter"},
 	}, StartDevnetAction)
 
 	done := make(chan error, 1)
 	go func() {
-		args := []string{"devkit", "--port", port, "--verbose", "--skip-deploy-contracts"}
+		args := []string{"devkit", "--port", port, "--verbose", "--skip-deploy-contracts", "--skip-transporter"}
 		done <- app.RunContext(ctx, args)
 	}()
 
@@ -653,40 +664,64 @@ func TestStartDevnet_ContextCancellation(t *testing.T) {
 	}
 }
 
-func TestStartDevnet_UseZeus(t *testing.T) {
-	os.Setenv("SKIP_DEVNET_FUNDING", "true")
-	originalCwd, err := os.Getwd()
-	assert.NoError(t, err)
-	t.Cleanup(func() { _ = os.Chdir(originalCwd) })
+// Zeus is not being used temporarily.
+// func TestStartDevnet_UseZeus(t *testing.T) {
+// 	os.Setenv("SKIP_DEVNET_FUNDING", "true")
+// 	originalCwd, err := os.Getwd()
+// 	assert.NoError(t, err)
+// 	t.Cleanup(func() { _ = os.Chdir(originalCwd) })
 
-	projectDir, err := testutils.CreateTempAVSProject(t)
-	assert.NoError(t, err)
-	defer os.RemoveAll(projectDir)
+// 	projectDir, err := testutils.CreateTempAVSProject(t)
+// 	assert.NoError(t, err)
+// 	defer os.RemoveAll(projectDir)
 
-	err = os.Chdir(projectDir)
-	assert.NoError(t, err)
+// 	err = os.Chdir(projectDir)
+// 	assert.NoError(t, err)
 
-	port, err := getFreePort()
-	assert.NoError(t, err)
+// 	port, err := getFreePort()
+// 	assert.NoError(t, err)
 
-	app, logger := testutils.CreateTestAppWithNoopLoggerAndAccess("devkit", []cli.Flag{
-		&cli.IntFlag{Name: "port"},
-		&cli.BoolFlag{Name: "verbose"},
-		&cli.BoolFlag{Name: "skip-deploy-contracts"},
-		&cli.BoolFlag{Name: "use-zeus"},
-	}, StartDevnetAction)
+// 	app := &cli.App{
+// 		Name: "devkit",
+// 		Flags: []cli.Flag{
+// 			&cli.IntFlag{Name: "port"},
+// 			&cli.BoolFlag{Name: "verbose"},
+// 			&cli.BoolFlag{Name: "skip-deploy-contracts"},
+// 			&cli.BoolFlag{Name: "skip-transporter"},
+// 			&cli.BoolFlag{Name: "use-zeus"},
+// 		},
+// 		Action: StartDevnetAction,
+// 	}
 
-	err = app.Run([]string{"devkit", "--port", port, "--verbose", "--skip-deploy-contracts", "--use-zeus"})
-	// Check error is nil
-	assert.NoError(t, err, "Running devnet with --use-zeus flag should not produce an error")
+// 	var stdOut bytes.Buffer
 
-	// Check that zeus is mentioned in the logs
-	assert.True(t, logger.Contains("zeus"), "Logger should contain 'zeus' when --use-zeus flag is used")
-	assert.Equal(t, 0, len(logger.GetEntriesByLevel("ERROR")), "Logger should not contain ERROR-level messages")
+// 	originalStderr := os.Stderr
+// 	originalStdout := os.Stdout
 
-	stopApp, _ := testutils.CreateTestAppWithNoopLoggerAndAccess("devkit", []cli.Flag{
-		&cli.IntFlag{Name: "port"},
-	}, StopDevnetAction)
+// 	r, w, _ := os.Pipe()
+// 	os.Stdout = w
+// 	os.Stderr = w
 
-	_ = stopApp.Run([]string{"devkit", "--port", port})
-}
+// 	err = app.Run([]string{"devkit", "--port", port, "--verbose", "--skip-deploy-contracts", "--skip-transporter", "--use-zeus"})
+// 	// Check error is nil
+// 	assert.NoError(t, err, "Running devnet with --use-zeus flag should not produce an error")
+
+// 	w.Close()
+// 	os.Stdout = originalStdout
+// 	os.Stderr = originalStderr
+
+// 	_, err = io.Copy(&stdOut, r)
+// 	assert.NoError(t, err)
+
+// 	// Check output
+// 	output := stdOut.String()
+// 	assert.Contains(t, output, "zeus", "Output should mention zeus when --use-zeus flag is used")
+// 	assert.NotContains(t, output, "error", "Output should not contain error messages")
+
+// 	stopApp := &cli.App{
+// 		Name:   "devkit",
+// 		Flags:  []cli.Flag{&cli.IntFlag{Name: "port"}},
+// 		Action: StopDevnetAction,
+// 	}
+// 	_ = stopApp.Run([]string{"devkit", "--port", port})
+// }
