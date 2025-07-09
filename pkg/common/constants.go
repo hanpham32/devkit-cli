@@ -26,6 +26,6 @@ const (
 	// Docker open retry interval in milliseconds
 	DockerOpenRetryIntervalMilliseconds = 500
 
-	// Default chainId for Anvil
-	DefaultAnvilChainId = 31337
+	// CrossChainRegistryOwnerAddress is the address of the owner of the cross chain registry
+	CrossChainRegistryOwnerAddress = "0xb094Ba769b4976Dc37fC689A76675f31bc4923b0"
 )

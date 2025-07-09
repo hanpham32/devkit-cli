@@ -27,9 +27,14 @@ var DevnetCommand = &cli.Command{
 					Usage: "Run without showing logs or interactive TUI",
 				},
 				&cli.IntFlag{
-					Name:  "port",
-					Usage: "Specify a custom port for local devnet",
+					Name:  "l1-port",
+					Usage: "Specify a custom port for local devnet L1",
 					Value: 8545,
+				},
+				&cli.IntFlag{
+					Name:  "l2-port",
+					Usage: "Specify a custom port for local devnet L2",
+					Value: 9545,
 				},
 				&cli.BoolFlag{
 					Name:  "skip-avs-run",
@@ -53,7 +58,12 @@ var DevnetCommand = &cli.Command{
 				},
 				&cli.BoolFlag{
 					Name:  "use-zeus",
-					Usage: "Use Zeus CLI to fetch holesky core addresses",
+					Usage: "Use Zeus CLI to fetch l1(sepolia) and l2(base sepolia) core addresses",
+					Value: false,
+				},
+				&cli.BoolFlag{
+					Name:  "persist",
+					Usage: "Persist devnet containers unless stop is used explicitly",
 					Value: false,
 				},
 			}, common.GlobalFlags...),
@@ -72,14 +82,19 @@ var DevnetCommand = &cli.Command{
 				&cli.BoolFlag{
 					Name:  "all",
 					Usage: "Stop all running devnet containers",
+					Value: true,
 				},
 				&cli.StringFlag{
 					Name:  "project.name",
 					Usage: "Stop containers associated with the given project name",
 				},
 				&cli.IntFlag{
-					Name:  "port",
-					Usage: "Stop container running on the specified port",
+					Name:  "l1-port",
+					Usage: "Stop only the L1 container running on the specified port",
+				},
+				&cli.IntFlag{
+					Name:  "l2-port",
+					Usage: "Stop only the L2 container running on the specified port",
 				},
 			},
 			Action: StopDevnetAction,
@@ -88,18 +103,6 @@ var DevnetCommand = &cli.Command{
 			Name:   "list",
 			Usage:  "Lists all running devkit devnet containers with their ports",
 			Action: ListDevnetContainersAction,
-		},
-		{
-			Name:   "fetch-addresses",
-			Usage:  "Fetches current EigenLayer core addresses from holesky using Zeus CLI",
-			Action: FetchZeusAddressesAction,
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  "context",
-					Usage: "Context to update with Zeus addresses",
-					Value: "devnet",
-				},
-			},
 		},
 		// TODO: Surface the following actions as separate commands:
 		// - update-avs-metadata: Updates the AVS metadata URI on the devnet

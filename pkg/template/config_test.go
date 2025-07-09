@@ -17,7 +17,7 @@ func TestLoadConfig(t *testing.T) {
 	}
 
 	expectedBaseURL := "https://github.com/Layr-Labs/hourglass-avs-template"
-	expectedVersion := "a39911dd514ae2ca8248b871037f93b35685129a"
+	expectedVersion := "v0.0.14"
 
 	if mainBaseURL != expectedBaseURL {
 		t.Errorf("Unexpected main template base URL: got %s, want %s", mainBaseURL, expectedBaseURL)

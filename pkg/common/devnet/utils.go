@@ -1,6 +1,7 @@
 package devnet
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -8,10 +9,13 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Layr-Labs/devkit-cli/pkg/common"
+	"github.com/Layr-Labs/devkit-cli/pkg/common/iface"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/urfave/cli/v2"
 )
 
@@ -181,4 +185,120 @@ func ensureDockerHostRegex(inputUrl string, dockerHost string) string {
 // This should always use localhost since it's for host→container communication
 func GetRPCURL(port int) string {
 	return fmt.Sprintf("http://localhost:%d", port)
+}
+
+// GetL2BlockByNumber retrieves the timestamp of a specific L2 block by its number.
+func GetL2BlockByNumber(ctx *cli.Context, l2RpcUrl string, blockNumber uint64, logger iface.Logger) (string, error) {
+	rpcClient, err := rpc.DialContext(context.Background(), l2RpcUrl)
+	if err != nil {
+		return "", fmt.Errorf("failed to dial RPC: %v", err)
+	}
+	defer rpcClient.Close()
+
+	var blockResult map[string]interface{}
+	err = rpcClient.CallContext(context.Background(), &blockResult, "eth_getBlockByNumber", "latest", false)
+	if err != nil {
+		return "", fmt.Errorf("failed to call eth_getBlockByNumber: %v", err)
+	}
+
+	timestampHex, ok := blockResult["timestamp"].(string)
+	if !ok {
+		return "", fmt.Errorf("failed to get timestamp from block")
+	}
+
+	// Convert hex timestamp to decimal string
+	if len(timestampHex) < 2 || timestampHex[:2] != "0x" {
+		return "", fmt.Errorf("invalid timestamp hex format: %s", timestampHex)
+	}
+
+	timestampInt, err := strconv.ParseUint(timestampHex[2:], 16, 64)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse timestamp hex: %v", err)
+	}
+
+	return strconv.FormatUint(timestampInt, 10), nil
+}
+
+func AdvanceBlocks(ctx *cli.Context, l1RpcUrl string, numBlocks uint64) error {
+	// Connect to provided client
+	rpcClient, err := rpc.Dial(l1RpcUrl)
+	if err != nil {
+		return fmt.Errorf("failed to connect to RPC: %w", err)
+	}
+	defer rpcClient.Close()
+
+	// Advance numBlocks blocks on client
+	err = rpcClient.Call(nil, "anvil_mine", numBlocks)
+	if err != nil {
+		return fmt.Errorf("failed to advance blocks: %w", err)
+	}
+
+	return nil
+}
+
+func AdvanceBlocksToTS(client *rpc.Client, name string, fromTS, toTS uint64) error {
+	// Set number of blocks to move each iteration
+	const blocksPerBatch = 1
+
+	// While timestamps are out of sync mine blocksPerBatch at a time
+	for fromTS < toTS {
+		if err := client.Call(nil, "anvil_mine", blocksPerBatch); err != nil {
+			return fmt.Errorf("failed to mine on %s: %w", name, err)
+		}
+		newTS, err := GetTimestamp(client, name)
+		if err != nil {
+			return err
+		}
+		fromTS = newTS
+	}
+	return nil
+}
+
+func GetTimestamp(client *rpc.Client, name string) (uint64, error) {
+	// Collect the block height for provided client
+	var block map[string]interface{}
+	if err := client.Call(&block, "eth_getBlockByNumber", "latest", false); err != nil {
+		return 0, fmt.Errorf("failed to get latest %s block: %w", name, err)
+	}
+	tsHex, ok := block["timestamp"].(string)
+	if !ok {
+		return 0, fmt.Errorf("invalid timestamp format for %s", name)
+	}
+	return strconv.ParseUint(tsHex[2:], 16, 64)
+}
+
+func SyncL1L2Timestamps(ctx *cli.Context, l1RpcUrl string, l2RpcUrl string) error {
+	// Connect to l1
+	l1Client, err := rpc.Dial(l1RpcUrl)
+	if err != nil {
+		return fmt.Errorf("failed to connect to L1: %w", err)
+	}
+	defer l1Client.Close()
+
+	// Connect to l2
+	l2Client, err := rpc.Dial(l2RpcUrl)
+	if err != nil {
+		return fmt.Errorf("failed to connect to L2: %w", err)
+	}
+	defer l2Client.Close()
+
+	// Get l1 and l2 current timestamps
+	l1TS, err := GetTimestamp(l1Client, "L1")
+	if err != nil {
+		return err
+	}
+	l2TS, err := GetTimestamp(l2Client, "L2")
+	if err != nil {
+		return err
+	}
+
+	// Advance one or the other until we reach sync
+	if l1TS > l2TS {
+		return AdvanceBlocksToTS(l2Client, "L2", l2TS, l1TS)
+	} else if l2TS > l1TS {
+		return AdvanceBlocksToTS(l1Client, "L1", l1TS, l2TS)
+	}
+
+	// Already in sync
+	return nil
 }

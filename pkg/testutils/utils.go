@@ -142,9 +142,13 @@ func CreateTempAVSProject(t *testing.T) (string, error) {
 		return "", fmt.Errorf("failed to create config/contexts dir: %w", err)
 	}
 
-	// Set fork_urls as envs
-	os.Setenv("L1_FORK_URL", "https://eth.llamarpc.com")
-	os.Setenv("L2_FORK_URL", "https://eth.llamarpc.com")
+	// Set fork_urls as envs only if not already set (fallback behavior)
+	if os.Getenv("L1_FORK_URL") == "" {
+		os.Setenv("L1_FORK_URL", "https://ethereum-holesky.publicnode.com") // Ethereum Holesky for L1
+	}
+	if os.Getenv("L2_FORK_URL") == "" {
+		os.Setenv("L2_FORK_URL", "https://base-sepolia.gateway.tenderly.co") // Base Sepolia for L2
+	}
 
 	// Copy devnet.yaml context file
 	destDevnetFile := filepath.Join(destContextsDir, "devnet.yaml")
@@ -158,11 +162,6 @@ func CreateTempAVSProject(t *testing.T) (string, error) {
 	if err := os.MkdirAll(scriptsDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	deployScript := `#!/bin/bash
-echo '{"mock": "deployContracts"}'`
-	if err := os.WriteFile(filepath.Join(scriptsDir, "deployContracts"), []byte(deployScript), 0755); err != nil {
-		t.Fatal(err)
-	}
 	getOperatorSets := `#!/bin/bash
 echo '{"mock": "getOperatorSets"}'`
 	if err := os.WriteFile(filepath.Join(scriptsDir, "getOperatorSets"), []byte(getOperatorSets), 0755); err != nil {
@@ -171,6 +170,16 @@ echo '{"mock": "getOperatorSets"}'`
 	getOperatorRegistrationMetadata := `#!/bin/bash
 echo '{"mock": "getOperatorRegistrationMetadata"}'`
 	if err := os.WriteFile(filepath.Join(scriptsDir, "getOperatorRegistrationMetadata"), []byte(getOperatorRegistrationMetadata), 0755); err != nil {
+		t.Fatal(err)
+	}
+	deployL1Contracts := `#!/bin/bash
+echo '{"mock": "deployL1Contracts"}'`
+	if err := os.WriteFile(filepath.Join(scriptsDir, "deployL1Contracts"), []byte(deployL1Contracts), 0755); err != nil {
+		t.Fatal(err)
+	}
+	deployL2Contracts := `#!/bin/bash
+echo '{"mock": "deployL2Contracts"}'`
+	if err := os.WriteFile(filepath.Join(scriptsDir, "deployL2Contracts"), []byte(deployL2Contracts), 0755); err != nil {
 		t.Fatal(err)
 	}
 	run := `#!/bin/bash
