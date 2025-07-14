@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/Layr-Labs/devkit-cli/config/configs"
+	"github.com/Layr-Labs/devkit-cli/config/contexts"
 	"github.com/Layr-Labs/devkit-cli/pkg/common"
 	"github.com/Layr-Labs/devkit-cli/pkg/testutils"
 	"gopkg.in/yaml.v3"
@@ -51,6 +53,24 @@ var BuildCommand = &cli.Command{
 		version := cfg.Context["devnet"].Artifact.Version
 		if version == "" {
 			version = "0"
+		}
+
+		// Migrate config
+		configsMigratedCount, err := configs.MigrateConfig(logger)
+		if err != nil {
+			logger.Error("config migration failed: %w", err)
+		}
+		if configsMigratedCount > 0 {
+			logger.Info("configs migrated: %d", configsMigratedCount)
+		}
+
+		// Migrate contexts
+		contextsMigratedCount, err := contexts.MigrateContexts(logger)
+		if err != nil {
+			logger.Error("context migrations failed: %w", err)
+		}
+		if contextsMigratedCount > 0 {
+			logger.Info("contexts migrated: %d", contextsMigratedCount)
 		}
 
 		logger.Debug("Project Name: %s", cfg.Config.Project.Name)
