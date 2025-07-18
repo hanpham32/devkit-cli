@@ -85,17 +85,10 @@ func updateContextWithDigest(digest string) error {
 
 // updateContextWithVersion updates the context YAML file with the new version
 func updateContextWithVersion(cCtx *cli.Context, version string) error {
-	// Extract vars
-	contextName := cCtx.String("context")
-
 	// Load the context yaml file
-	yamlPath, rootNode, contextNode, err := common.LoadContext(contextName)
+	yamlPath, rootNode, contextNode, err := common.LoadContext(cCtx.String("context"))
 	if err != nil {
 		return err
-	}
-	// Move to selectedContext if different
-	if contextName == "" {
-		contextName = common.GetChildByKey(contextNode, "name").Value
 	}
 
 	// Get or create artifact section
