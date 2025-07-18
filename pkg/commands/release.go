@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -85,11 +84,18 @@ func updateContextWithDigest(digest string) error {
 }
 
 // updateContextWithVersion updates the context YAML file with the new version
-func updateContextWithVersion(version string) error {
+func updateContextWithVersion(cCtx *cli.Context, version string) error {
+	// Extract vars
+	contextName := cCtx.String("context")
+
 	// Load the context yaml file
-	yamlPath, rootNode, contextNode, err := common.LoadContext(devnet.DEVNET_CONTEXT)
+	yamlPath, rootNode, contextNode, err := common.LoadContext(contextName)
 	if err != nil {
 		return err
+	}
+	// Move to selectedContext if different
+	if contextName == "" {
+		contextName = common.GetChildByKey(contextNode, "name").Value
 	}
 
 	// Get or create artifact section
@@ -123,6 +129,10 @@ var ReleaseCommand = &cli.Command{
 			Name:  "publish",
 			Usage: "Publish a new AVS release",
 			Flags: append(common.GlobalFlags, []cli.Flag{
+				&cli.StringFlag{
+					Name:  "context",
+					Usage: "Select the context to use in this command (devnet, testnet or mainnet)",
+				},
 				&cli.Int64Flag{
 					Name:     "upgrade-by-time",
 					Usage:    "Unix timestamp by which the upgrade must be completed",
@@ -187,7 +197,7 @@ func processOperatorSetsAndPublishReleaseOnChain(cCtx *cli.Context, logger iface
 		}
 
 		logger.Info("Publishing release for operator set %s with %d artifacts...", opSetId, len(artifacts))
-		if err := publishReleaseToReleaseManagerAction(cCtx.Context, logger, avs, uint32(opSetIdInt), upgradeByTime, artifacts); err != nil {
+		if err := publishReleaseToReleaseManagerAction(cCtx, logger, avs, uint32(opSetIdInt), upgradeByTime, artifacts); err != nil {
 			if strings.Contains(err.Error(), "connection refused") {
 				logger.Warn("Failed to publish release for operator set %s: %v", opSetId, err)
 				logger.Info("Check if devnet is running and try again")
@@ -204,21 +214,24 @@ func publishReleaseAction(cCtx *cli.Context) error {
 	logger := common.LoggerFromContext(cCtx.Context)
 
 	// Get values from flags
+	contextName := cCtx.String("context")
 	upgradeByTime := cCtx.Int64("upgrade-by-time")
 	registry := cCtx.String("registry")
 
 	// Get build artifact from context first to read registry URL and version
-	cfg, err := common.LoadConfigWithContextConfig(devnet.DEVNET_CONTEXT) // TODO: make context configurable
+	cfg, err := common.LoadConfigWithContextConfig(contextName)
 	if err != nil {
 		return fmt.Errorf("failed to load context config: %w", err)
 	}
-
-	if cfg.Context[devnet.DEVNET_CONTEXT].Artifact == nil {
+	if contextName == "" {
+		contextName = cfg.Config.Project.Context
+	}
+	if cfg.Context[contextName].Artifact == nil {
 		return fmt.Errorf("no artifact found in context. Please run 'devkit avs build' first")
 	}
 
-	artifact := cfg.Context[devnet.DEVNET_CONTEXT].Artifact
-	avs := cfg.Context[devnet.DEVNET_CONTEXT].Avs.Address
+	artifact := cfg.Context[contextName].Artifact
+	avs := cfg.Context[contextName].Avs.Address
 	// Validate AVS address
 	if avs == "" {
 		return fmt.Errorf("AVS addressempty in context")
@@ -260,7 +273,7 @@ func publishReleaseAction(cCtx *cli.Context) error {
 	} else {
 		logger.Info("Using provided registry: %s", finalRegistry)
 	}
-	component := cfg.Context[devnet.DEVNET_CONTEXT].Artifact.Component
+	component := cfg.Context[contextName].Artifact.Component
 	// Execute release script with version and registry
 	releaseCmd := exec.CommandContext(cCtx.Context, "bash", releaseScriptPath,
 		"--version", version,
@@ -285,7 +298,7 @@ func publishReleaseAction(cCtx *cli.Context) error {
 	}
 
 	// Update version in context
-	if err := updateContextWithVersion(version); err != nil {
+	if err := updateContextWithVersion(cCtx, version); err != nil {
 		return fmt.Errorf("failed to update context with version: %w", err)
 	}
 
@@ -317,20 +330,25 @@ func incrementVersion(version string) (string, error) {
 	return strconv.Itoa(versionInt), nil
 }
 
-func publishReleaseToReleaseManagerAction(ctx context.Context, logger iface.Logger, avs string, operatorSetId uint32, upgradeByTime int64, artifacts []releasemanager.IReleaseManagerTypesArtifact) error {
+func publishReleaseToReleaseManagerAction(cCtx *cli.Context, logger iface.Logger, avs string, operatorSetId uint32, upgradeByTime int64, artifacts []releasemanager.IReleaseManagerTypesArtifact) error {
+	ctx := cCtx.Context
+	contextName := cCtx.String("context")
 
-	cfg, err := common.LoadConfigWithContextConfig(devnet.DEVNET_CONTEXT)
+	cfg, err := common.LoadConfigWithContextConfig(contextName)
 	if err != nil {
 		return fmt.Errorf("failed to load configurations for operator registration: %w", err)
 	}
-	envCtx, ok := cfg.Context[devnet.DEVNET_CONTEXT]
+	if contextName == "" {
+		contextName = cfg.Config.Project.Context
+	}
+	envCtx, ok := cfg.Context[contextName]
 	if !ok {
-		return fmt.Errorf("context '%s' not found in configuration", devnet.DEVNET_CONTEXT)
+		return fmt.Errorf("context '%s' not found in configuration", contextName)
 	}
 
 	l1Cfg, ok := envCtx.Chains[devnet.L1]
 	if !ok {
-		return fmt.Errorf("failed to get l1 chain config for context '%s'", devnet.DEVNET_CONTEXT)
+		return fmt.Errorf("failed to get l1 chain config for context '%s'", contextName)
 	}
 
 	client, err := ethclient.Dial(l1Cfg.RPCURL)
