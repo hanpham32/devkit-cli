@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/Layr-Labs/devkit-cli/pkg/common"
-	"github.com/Layr-Labs/devkit-cli/pkg/common/devnet"
 	"github.com/Layr-Labs/devkit-cli/pkg/common/iface"
 	releasemanager "github.com/Layr-Labs/eigenlayer-contracts/pkg/bindings/ReleaseManager"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -339,7 +338,7 @@ func publishReleaseToReleaseManagerAction(cCtx *cli.Context, logger iface.Logger
 		return fmt.Errorf("context '%s' not found in configuration", contextName)
 	}
 
-	l1Cfg, ok := envCtx.Chains[devnet.L1]
+	l1Cfg, ok := envCtx.Chains[common.L1]
 	if !ok {
 		return fmt.Errorf("failed to get l1 chain config for context '%s'", contextName)
 	}
@@ -359,7 +358,7 @@ func publishReleaseToReleaseManagerAction(cCtx *cli.Context, logger iface.Logger
 	}
 	// Trim 0x
 	avsPrivateKey = strings.TrimPrefix(avsPrivateKey, "0x")
-	_, _, _, _, _, _, releaseManagerAddress := devnet.GetEigenLayerAddresses(cfg)
+	_, _, _, _, _, _, releaseManagerAddress := common.GetEigenLayerAddresses(contextName, cfg)
 
 	contractCaller, err := common.NewContractCaller(
 		avsPrivateKey,
