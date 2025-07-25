@@ -190,11 +190,11 @@ func processOperatorSetsAndPublishReleaseOnChain(cCtx *cli.Context, logger iface
 
 		logger.Info("Publishing release for operator set %s with %d artifacts...", opSetId, len(artifacts))
 		if err := publishReleaseToReleaseManagerAction(cCtx, logger, avs, uint32(opSetIdInt), upgradeByTime, artifacts); err != nil {
+			logger.Warn("Failed to publish release for operator set %s: %v", opSetId, err)
 			if strings.Contains(err.Error(), "connection refused") {
-				logger.Warn("Failed to publish release for operator set %s: %v", opSetId, err)
 				logger.Info("Check if devnet is running and try again")
-				return err
 			}
+			return err
 		}
 		logger.Info("Successfully published release for operator set %s", opSetId)
 	}
@@ -298,7 +298,7 @@ func publishReleaseAction(cCtx *cli.Context) error {
 	logger.Info("Processing operator set mapping from script output...")
 	operatorSetMapping, err := parseOperatorSetMapping(string(output))
 	if err != nil {
-		logger.Warn("Failed to parse operator set mapping in hourglass release script: %v", err)
+		logger.Warn("Failed to parse operator set mapping in release script: %v", err)
 		return err
 	}
 
@@ -352,16 +352,20 @@ func publishReleaseToReleaseManagerAction(cCtx *cli.Context, logger iface.Logger
 	operatorSetId = uint32(operatorSetId)
 	upgradeByTime = int64(upgradeByTime)
 
-	avsPrivateKey := envCtx.Avs.AVSPrivateKey
-	if avsPrivateKey == "" {
-		return fmt.Errorf("AVS private key not found in context")
+	// Try if AVS private key is available, if not try AVS admin private key
+	privateKey := envCtx.Avs.AVSPrivateKey
+	if privateKey == "" {
+		privateKey = envCtx.Avs.AVSAdminPrivateKey
+	}
+	if privateKey == "" {
+		return fmt.Errorf("AVS or AVS admin private key not found in context")
 	}
 	// Trim 0x
-	avsPrivateKey = strings.TrimPrefix(avsPrivateKey, "0x")
+	privateKey = strings.TrimPrefix(privateKey, "0x")
 	_, _, _, _, _, _, releaseManagerAddress := common.GetEigenLayerAddresses(contextName, cfg)
 
 	contractCaller, err := common.NewContractCaller(
-		avsPrivateKey,
+		privateKey,
 		big.NewInt(int64(l1Cfg.ChainID)),
 		client,
 		ethcommon.HexToAddress(""),

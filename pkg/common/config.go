@@ -74,10 +74,11 @@ type StakerDeposits struct {
 }
 
 type AvsConfig struct {
-	Address          string `json:"address" yaml:"address"`
-	MetadataUri      string `json:"metadata_url" yaml:"metadata_url"`
-	AVSPrivateKey    string `json:"avs_private_key" yaml:"avs_private_key"`
-	RegistrarAddress string `json:"registrar_address" yaml:"registrar_address"`
+	Address            string `json:"address" yaml:"address"`
+	MetadataUri        string `json:"metadata_url" yaml:"metadata_url"`
+	AVSPrivateKey      string `json:"avs_private_key" yaml:"avs_private_key"`
+	AVSAdminPrivateKey string `json:"avs_admin_private_key" yaml:"avs_admin_private_key"`
+	RegistrarAddress   string `json:"registrar_address" yaml:"registrar_address"`
 }
 
 type EigenLayerConfig struct {
