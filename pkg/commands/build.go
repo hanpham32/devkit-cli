@@ -73,12 +73,19 @@ var BuildCommand = &cli.Command{
 		// All scripts contained here
 		scriptsDir := filepath.Join(".devkit", "scripts")
 
+		// Load context JSON to pass to script
+		contextJSON, err := common.LoadRawContext(contextName)
+		if err != nil {
+			return fmt.Errorf("failed to load context: %w", err)
+		}
+
 		// Execute build via .devkit scripts with project name
 		output, err := common.CallTemplateScript(cCtx.Context, logger, dir, filepath.Join(scriptsDir, "build"), common.ExpectJSONResponse,
 			[]byte("--image"),
 			[]byte(cfg.Config.Project.Name),
 			[]byte("--tag"),
 			[]byte(version),
+			contextJSON,
 		)
 		if err != nil {
 			logger.Error("Build script failed with error: %v", err)
