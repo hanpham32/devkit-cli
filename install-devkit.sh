@@ -2,27 +2,14 @@
 
 set -e
 
-# DevKit version from tee-mvp branch
-DEVKIT_VERSION=$(curl -fsSL https://raw.githubusercontent.com/Layr-Labs/devkit-cli/tee-mvp/VERSION)
-DEVKIT_BASE_URL="https://s3.amazonaws.com/eigenlayer-devkit-releases"
+# Build DevKit from tee-mvp branch source
+REPO_URL="https://github.com/Layr-Labs/devkit-cli"
+BRANCH="tee-mvp"
 
-# Detect platform
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-ARCH=$(uname -m)
-
-case $OS in
-    darwin) OS="darwin" ;;
-    linux) OS="linux" ;;
-    *) echo "Error: Unsupported OS: $OS"; exit 1 ;;
-esac
-
-case $ARCH in
-    x86_64|amd64) ARCH="amd64" ;;
-    arm64|aarch64) ARCH="arm64" ;;
-    *) echo "Error: Unsupported architecture: $ARCH"; exit 1 ;;
-esac
-
-PLATFORM="${OS}-${ARCH}"
+# Check for required tools
+command -v git >/dev/null 2>&1 || { echo "Error: git is required but not installed."; exit 1; }
+command -v go >/dev/null 2>&1 || { echo "Error: go is required but not installed."; exit 1; }
+command -v make >/dev/null 2>&1 || { echo "Error: make is required but not installed."; exit 1; }
 
 # Prompt for installation directory
 if [[ -t 0 ]]; then
@@ -58,15 +45,26 @@ else
     mkdir -p "$INSTALL_DIR"
 fi
 
-# Download and install
-DEVKIT_URL="${DEVKIT_BASE_URL}/${DEVKIT_VERSION}/devkit-${PLATFORM}-${DEVKIT_VERSION}.tar.gz"
-echo "Downloading DevKit ${DEVKIT_VERSION} for ${PLATFORM}..."
+# Clone and build from source
+TEMP_DIR=$(mktemp -d)
+echo "Cloning DevKit from ${REPO_URL} (${BRANCH})..."
+git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$TEMP_DIR"
 
+echo "Building DevKit..."
+cd "$TEMP_DIR"
+make build
+
+echo "Installing DevKit to $INSTALL_DIR..."
 if [[ "$INSTALL_DIR" == "/usr/local/bin" ]]; then
-    curl -sL "$DEVKIT_URL" | sudo tar xz -C "$INSTALL_DIR"
+    sudo cp bin/devkit "$INSTALL_DIR/devkit"
+    sudo chmod +x "$INSTALL_DIR/devkit"
 else
-    curl -sL "$DEVKIT_URL" | tar xz -C "$INSTALL_DIR"
+    cp bin/devkit "$INSTALL_DIR/devkit"
+    chmod +x "$INSTALL_DIR/devkit"
 fi
+
+# Clean up
+rm -rf "$TEMP_DIR"
 
 echo "✅ DevKit installed to $INSTALL_DIR/devkit"
 
