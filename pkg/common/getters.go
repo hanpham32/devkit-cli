@@ -23,7 +23,7 @@ func GetForkUrlDefault(contextName string, cfg *ConfigWithContextConfig, chainNa
 	if !found {
 		return "", fmt.Errorf("failed to get chainConfig for chainName : %s", chainName)
 	}
-	if chainConfig.Fork.Url == "" {
+	if chainConfig.Fork == nil || chainConfig.Fork.Url == "" {
 		return "", fmt.Errorf("fork-url not set for %s; set fork-url in ./config/context/%s.yaml or .env and consult README for guidance", chainName, contextName)
 	}
 	return chainConfig.Fork.Url, nil
