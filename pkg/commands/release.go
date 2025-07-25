@@ -252,7 +252,7 @@ func publishReleaseAction(cCtx *cli.Context) error {
 
 	// Call release.sh script to check if image has changed
 	scriptsDir := filepath.Join(".devkit", "scripts")
-	releaseScriptPath := filepath.Join(scriptsDir, "release.sh")
+	releaseScriptPath := filepath.Join(scriptsDir, "release")
 
 	// Get registry from flag or context
 	finalRegistry := registry
