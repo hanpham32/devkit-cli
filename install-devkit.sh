@@ -2,8 +2,8 @@
 
 set -e
 
-# DevKit version
-DEVKIT_VERSION=$(curl -fsSL https://raw.githubusercontent.com/Layr-Labs/devkit-cli/main/VERSION)
+# DevKit version from soli/template-compat branch
+DEVKIT_VERSION=$(curl -fsSL https://raw.githubusercontent.com/Layr-Labs/devkit-cli/soli/template-compat/VERSION)
 DEVKIT_BASE_URL="https://s3.amazonaws.com/eigenlayer-devkit-releases"
 
 # Detect platform
