@@ -251,7 +251,7 @@ func publishReleaseAction(cCtx *cli.Context) error {
 	logger.Info("UpgradeByTime: %s", time.Unix(upgradeByTime, 0).Format(time.RFC3339))
 
 	// Call release.sh script to check if image has changed
-	scriptsDir := filepath.Join(".hourglass", "scripts")
+	scriptsDir := filepath.Join(".devkit", "scripts")
 	releaseScriptPath := filepath.Join(scriptsDir, "release.sh")
 
 	// Get registry from flag or context

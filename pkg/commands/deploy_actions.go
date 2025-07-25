@@ -97,14 +97,8 @@ func StartDeployL1Action(cCtx *cli.Context) error {
 	}
 
 	// Get fork_urls for the provided network (default to sepolia testnet)
-	l1ForkUrl, err := common.GetForkUrlDefault(contextName, config, common.L1)
-	if err != nil {
-		return fmt.Errorf("L1 fork URL error %w", err)
-	}
-	l2ForkUrl, err := common.GetForkUrlDefault(contextName, config, common.L2)
-	if err != nil {
-		return fmt.Errorf("L2 fork URL error: %w", err)
-	}
+	l1ForkUrl, _ := common.GetForkUrlDefault(contextName, config, common.L1)
+	l2ForkUrl, _ := common.GetForkUrlDefault(contextName, config, common.L2)
 
 	// Get chains node
 	chainsNode := common.GetChildByKey(contextNode, "chains")
@@ -113,20 +107,24 @@ func StartDeployL1Action(cCtx *cli.Context) error {
 	}
 
 	// Update RPC URLs for L1 chain
-	l1ChainNode := common.GetChildByKey(chainsNode, common.L1)
-	if l1ChainNode != nil {
-		l1RpcUrlNode := common.GetChildByKey(l1ChainNode, "rpc_url")
-		if l1RpcUrlNode != nil {
-			l1RpcUrlNode.Value = l1ForkUrl
+	if l1ForkUrl != "" {
+		l1ChainNode := common.GetChildByKey(chainsNode, common.L1)
+		if l1ChainNode != nil {
+			l1RpcUrlNode := common.GetChildByKey(l1ChainNode, "rpc_url")
+			if l1RpcUrlNode != nil {
+				l1RpcUrlNode.Value = l1ForkUrl
+			}
 		}
 	}
 
 	// Update RPC URLs for L2 chain
-	l2ChainNode := common.GetChildByKey(chainsNode, common.L2)
-	if l2ChainNode != nil {
-		l2RpcUrlNode := common.GetChildByKey(l2ChainNode, "rpc_url")
-		if l2RpcUrlNode != nil {
-			l2RpcUrlNode.Value = l2ForkUrl
+	if l2ForkUrl != "" {
+		l2ChainNode := common.GetChildByKey(chainsNode, common.L2)
+		if l2ChainNode != nil {
+			l2RpcUrlNode := common.GetChildByKey(l2ChainNode, "rpc_url")
+			if l2RpcUrlNode != nil {
+				l2RpcUrlNode.Value = l2ForkUrl
+			}
 		}
 	}
 
