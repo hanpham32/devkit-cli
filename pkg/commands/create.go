@@ -145,6 +145,13 @@ var CreateCommand = &cli.Command{
 		scriptDir := filepath.Join(".devkit", "scripts")
 		scriptPath := filepath.Join(scriptDir, "init")
 
+		// Load template configuration
+		templateConfig, err := loadTemplateConfig(targetDir)
+		if err != nil {
+			logger.Warn("Failed to load template config: %v", err)
+			templateConfig = make(map[string]interface{})
+		}
+
 		// Run init to install deps
 		logger.Info("Installing template dependencies\n\n")
 
@@ -192,7 +199,7 @@ var CreateCommand = &cli.Command{
 		}
 
 		// Copies the default keystore json files in the keystores/ directory
-		if err := copyDefaultKeystoresToProject(logger, targetDir); err != nil {
+		if err := copyDefaultKeystoresToProject(logger, targetDir, templateConfig); err != nil {
 			return fmt.Errorf("failed to initialize keystores: %w", err)
 		}
 
@@ -240,6 +247,28 @@ func getTemplateURLs(cCtx *cli.Context) (string, string, error) {
 	}
 
 	return mainBaseURL, mainVersion, nil
+}
+
+// loadTemplateConfig loads the template configuration from .devkit/config.yaml if it exists
+func loadTemplateConfig(targetDir string) (map[string]interface{}, error) {
+	devkitConfigPath := filepath.Join(targetDir, ".devkit", "config.yaml")
+
+	// If config doesn't exist, return empty map
+	if _, err := os.Stat(devkitConfigPath); os.IsNotExist(err) {
+		return make(map[string]interface{}), nil
+	}
+
+	data, err := os.ReadFile(devkitConfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read template config: %w", err)
+	}
+
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse template config: %w", err)
+	}
+
+	return config, nil
 }
 
 func createProjectDir(logger iface.Logger, targetDir string, overwrite bool) error {
@@ -321,7 +350,13 @@ func copyDefaultConfigToProject(logger iface.Logger, targetDir, projectName, pro
 }
 
 // Creates a keystores directory with default keystore json files
-func copyDefaultKeystoresToProject(logger iface.Logger, targetDir string) error {
+func copyDefaultKeystoresToProject(logger iface.Logger, targetDir string, templateConfig map[string]interface{}) error {
+	// Check if template config specifies to skip keystores
+	if skipKeystores, ok := templateConfig["skip_default_keystores"].(bool); ok && skipKeystores {
+		logger.Info("Skipping default keystore copy based on template configuration")
+		return nil
+	}
+
 	// Construct keystore dest
 	destKeystoreDir := filepath.Join(targetDir, "keystores")
 
