@@ -2,7 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"github.com/Layr-Labs/devkit-cli/pkg/common/devnet"
 	"path/filepath"
 
 	"github.com/Layr-Labs/devkit-cli/pkg/common"
@@ -14,7 +13,12 @@ import (
 var TestCommand = &cli.Command{
 	Name:  "test",
 	Usage: "Run AVS tests",
-	Flags: append([]cli.Flag{}, common.GlobalFlags...),
+	Flags: append([]cli.Flag{
+		&cli.StringFlag{
+			Name:  "context",
+			Usage: "Select the context to use in this command (devnet, testnet or mainnet)",
+		},
+	}, common.GlobalFlags...),
 	Action: func(cCtx *cli.Context) error {
 		// Invoke and return AVSTest
 		return AVSTest(cCtx)
@@ -34,8 +38,17 @@ func AVSTest(cCtx *cli.Context) error {
 	// Set path for .devkit scripts
 	scriptPath := filepath.Join(".devkit", "scripts", "test")
 
+	// Check for flagged contextName
+	contextName := cCtx.String("context")
+
 	// Set path for context yaml
-	contextJSON, err := common.LoadRawContext(devnet.DEVNET_CONTEXT) // @TODO: use selected context name
+	var err error
+	var contextJSON []byte
+	if contextName == "" {
+		contextJSON, _, err = common.LoadDefaultRawContext()
+	} else {
+		contextJSON, _, err = common.LoadRawContext(contextName)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to load context: %w", err)
 	}

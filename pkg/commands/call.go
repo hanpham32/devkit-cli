@@ -15,17 +15,31 @@ import (
 var CallCommand = &cli.Command{
 	Name:  "call",
 	Usage: "Submits tasks to the local devnet, triggers off-chain execution, and aggregates results",
-	Flags: common.GlobalFlags,
+	Flags: append([]cli.Flag{
+		&cli.StringFlag{
+			Name:  "context",
+			Usage: "Select the context to use in this command (devnet, testnet or mainnet)",
+		},
+	}, common.GlobalFlags...),
 	Action: func(cCtx *cli.Context) error {
 		// Get logger
 		logger := common.LoggerFromContext(cCtx.Context)
 
 		logger.Debug("Testing AVS tasks...")
 
+		// Check for flagged contextName
+		contextName := cCtx.String("context")
+
 		// Set path for context yaml
-		contextJSON, err := common.LoadRawContext("devnet") // @TODO: use selected context name
+		var err error
+		var contextJSON []byte
+		if contextName == "" {
+			contextJSON, _, err = common.LoadDefaultRawContext()
+		} else {
+			contextJSON, _, err = common.LoadRawContext(contextName)
+		}
 		if err != nil {
-			return fmt.Errorf("failed to load context %w", err)
+			return fmt.Errorf("failed to load context: %w", err)
 		}
 
 		// Run scriptPath from cwd

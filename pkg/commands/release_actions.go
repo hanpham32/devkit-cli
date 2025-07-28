@@ -30,19 +30,27 @@ func publishReleaseAction(cCtx *cli.Context) error {
 	// Get values from flags
 	upgradeByTime := cCtx.Int64("upgrade-by-time")
 	registry := cCtx.String("registry")
+	contextName := cCtx.String("context")
 
 	// Get build artifact from context first to read registry URL and version
-	cfg, err := common.LoadConfigWithContextConfig(devnet.DEVNET_CONTEXT) // TODO: make context configurable
+	var err error
+	var cfg *common.ConfigWithContextConfig
+	if contextName == "" {
+		cfg, contextName, err = common.LoadDefaultConfigWithContextConfig()
+	} else {
+		cfg, contextName, err = common.LoadConfigWithContextConfig(contextName)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to load context config: %w", err)
 	}
 
-	if cfg.Context[devnet.DEVNET_CONTEXT].Artifact == nil {
+	// Extract context details
+	if cfg.Context[contextName].Artifact == nil {
 		return fmt.Errorf("no artifact found in context. Please run 'devkit avs build' first")
 	}
 
-	artifact := cfg.Context[devnet.DEVNET_CONTEXT].Artifact
-	avs := cfg.Context[devnet.DEVNET_CONTEXT].Avs.Address
+	artifact := cfg.Context[contextName].Artifact
+	avs := cfg.Context[contextName].Avs.Address
 	// Validate AVS address
 	if avs == "" {
 		return fmt.Errorf("AVS addressempty in context")
@@ -50,7 +58,7 @@ func publishReleaseAction(cCtx *cli.Context) error {
 
 	// Check if metadata URI is set for any operator set before proceeding
 	logger.Info("Checking AVS metadata URI...")
-	if err := checkMetadataURIExists(logger, cfg, avs); err != nil {
+	if err := checkMetadataURIExists(logger, contextName, cfg, avs); err != nil {
 		return err
 	}
 
@@ -90,7 +98,7 @@ func publishReleaseAction(cCtx *cli.Context) error {
 	} else {
 		logger.Info("Using provided registry: %s", finalRegistry)
 	}
-	component := cfg.Context[devnet.DEVNET_CONTEXT].Artifact.Component
+	component := cfg.Context[contextName].Artifact.Component
 	// Execute release script with version and registry
 	releaseCmd := exec.CommandContext(cCtx.Context, "bash", releaseScriptPath,
 		"--version", version,
@@ -99,7 +107,7 @@ func publishReleaseAction(cCtx *cli.Context) error {
 	releaseCmd.Stderr = os.Stderr
 
 	// Add environment variable for context
-	releaseCmd.Env = append(os.Environ(), fmt.Sprintf("CONTEXT_NAME=%s", devnet.DEVNET_CONTEXT))
+	releaseCmd.Env = append(os.Environ(), fmt.Sprintf("CONTEXT_NAME=%s", contextName))
 
 	// Capture stdout to get the operator set mapping JSON
 	output, err := releaseCmd.Output()
@@ -119,7 +127,7 @@ func publishReleaseAction(cCtx *cli.Context) error {
 	logger.Info("Retrieved operator set mapping with %d operator sets", len(operatorSetMapping))
 
 	// Publish releases for each operator set
-	if err := processOperatorSetsAndPublishReleaseOnChain(cCtx, logger, operatorSetMapping, avs, upgradeByTime, finalRegistry, version); err != nil {
+	if err := processOperatorSetsAndPublishReleaseOnChain(cCtx, logger, contextName, operatorSetMapping, avs, upgradeByTime, finalRegistry, version); err != nil {
 		return err
 	}
 
@@ -130,7 +138,7 @@ func publishReleaseAction(cCtx *cli.Context) error {
 	}
 
 	// Update version in context
-	if err := updateContextWithVersion(newVersion); err != nil {
+	if err := updateContextWithVersion(contextName, newVersion); err != nil {
 		return fmt.Errorf("failed to update context with version: %w", err)
 	}
 
@@ -143,6 +151,7 @@ func publishReleaseAction(cCtx *cli.Context) error {
 func processOperatorSetsAndPublishReleaseOnChain(
 	cCtx *cli.Context,
 	logger iface.Logger,
+	contextName string,
 	operatorSetMapping map[string]OperatorSetRelease,
 	avs string,
 	upgradeByTime int64,
@@ -153,7 +162,13 @@ func processOperatorSetsAndPublishReleaseOnChain(
 	ociBuilder := artifact.NewOCIArtifactBuilder(logger)
 
 	// Get AVS name from context for artifact naming
-	cfg, err := common.LoadConfigWithContextConfig(devnet.DEVNET_CONTEXT)
+	var err error
+	var cfg *common.ConfigWithContextConfig
+	if contextName == "" {
+		cfg, contextName, err = common.LoadDefaultConfigWithContextConfig()
+	} else {
+		cfg, contextName, err = common.LoadConfigWithContextConfig(contextName)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to load context config: %w", err)
 	}
@@ -196,7 +211,7 @@ func processOperatorSetsAndPublishReleaseOnChain(
 		logger.Info("Successfully created OCI artifact with digest: %s", finalDigest)
 
 		// Update context with digest
-		err = updateContextWithDigest(finalDigest)
+		err = updateContextWithDigest(contextName, finalDigest)
 		if err != nil {
 			return fmt.Errorf("failed to update context with digest for operator set %s: %v", opSetId, err)
 		}
@@ -217,7 +232,7 @@ func processOperatorSetsAndPublishReleaseOnChain(
 		artifacts := []releasemanager.IReleaseManagerTypesArtifact{artifact}
 
 		logger.Info("Publishing release for operator set %s...", opSetId)
-		if err := publishReleaseToReleaseManagerAction(cCtx.Context, logger, avs, uint32(opSetIdInt), upgradeByTime, artifacts); err != nil {
+		if err := publishReleaseToReleaseManagerAction(cCtx.Context, logger, contextName, avs, uint32(opSetIdInt), upgradeByTime, artifacts); err != nil {
 			if strings.Contains(err.Error(), "connection refused") {
 				logger.Warn("Failed to publish release for operator set %s: %v", opSetId, err)
 				logger.Info("Check if devnet is running and try again")
@@ -241,16 +256,16 @@ func incrementVersion(version string) (string, error) {
 }
 
 // checkMetadataURIExists checks if metadata URI is set for at least one operator set
-func checkMetadataURIExists(logger iface.Logger, cfg *common.ConfigWithContextConfig, avsAddress string) error {
+func checkMetadataURIExists(logger iface.Logger, contextName string, cfg *common.ConfigWithContextConfig, avsAddress string) error {
 	// Get L1 chain config
-	envCtx, ok := cfg.Context[devnet.DEVNET_CONTEXT]
+	envCtx, ok := cfg.Context[contextName]
 	if !ok {
-		return fmt.Errorf("context '%s' not found in configuration", devnet.DEVNET_CONTEXT)
+		return fmt.Errorf("context '%s' not found in configuration", contextName)
 	}
 
 	l1Cfg, ok := envCtx.Chains[devnet.L1]
 	if !ok {
-		return fmt.Errorf("failed to get l1 chain config for context '%s'", devnet.DEVNET_CONTEXT)
+		return fmt.Errorf("failed to get l1 chain config for context '%s'", contextName)
 	}
 
 	// Connect to L1
@@ -313,24 +328,33 @@ func checkMetadataURIExists(logger iface.Logger, cfg *common.ConfigWithContextCo
 func publishReleaseToReleaseManagerAction(
 	ctx context.Context,
 	logger iface.Logger,
+	contextName string,
 	avs string,
 	operatorSetId uint32,
 	upgradeByTime int64,
 	artifacts []releasemanager.IReleaseManagerTypesArtifact,
 ) error {
-
-	cfg, err := common.LoadConfigWithContextConfig(devnet.DEVNET_CONTEXT)
-	if err != nil {
-		return fmt.Errorf("failed to load configurations for operator registration: %w", err)
+	// Load config according to provided contextName
+	var err error
+	var cfg *common.ConfigWithContextConfig
+	if contextName == "" {
+		cfg, contextName, err = common.LoadDefaultConfigWithContextConfig()
+	} else {
+		cfg, contextName, err = common.LoadConfigWithContextConfig(contextName)
 	}
-	envCtx, ok := cfg.Context[devnet.DEVNET_CONTEXT]
+	if err != nil {
+		return fmt.Errorf("failed to load configurations: %w", err)
+	}
+
+	// Extract context details
+	envCtx, ok := cfg.Context[contextName]
 	if !ok {
-		return fmt.Errorf("context '%s' not found in configuration", devnet.DEVNET_CONTEXT)
+		return fmt.Errorf("context '%s' not found in configuration", contextName)
 	}
 
 	l1Cfg, ok := envCtx.Chains[devnet.L1]
 	if !ok {
-		return fmt.Errorf("failed to get l1 chain config for context '%s'", devnet.DEVNET_CONTEXT)
+		return fmt.Errorf("failed to get l1 chain config for context '%s'", contextName)
 	}
 
 	client, err := ethclient.Dial(l1Cfg.RPCURL)
@@ -380,9 +404,16 @@ func setReleaseMetadataURIAction(cCtx *cli.Context) error {
 	metadataURI := cCtx.String("metadata-uri")
 	operatorSetID := cCtx.Uint("operator-set-id")
 	avsAddressStr := cCtx.String("avs-address")
+	contextName := cCtx.String("context")
 
-	// Load configuration
-	cfg, err := common.LoadConfigWithContextConfig(devnet.DEVNET_CONTEXT) // TODO: make context configurable
+	// Load config according to provided contextName
+	var err error
+	var cfg *common.ConfigWithContextConfig
+	if contextName == "" {
+		cfg, contextName, err = common.LoadDefaultConfigWithContextConfig()
+	} else {
+		cfg, contextName, err = common.LoadConfigWithContextConfig(contextName)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to load context config: %w", err)
 	}
@@ -392,7 +423,7 @@ func setReleaseMetadataURIAction(cCtx *cli.Context) error {
 	if avsAddressStr != "" {
 		avsAddress = avsAddressStr
 	} else {
-		avsAddress = cfg.Context[devnet.DEVNET_CONTEXT].Avs.Address
+		avsAddress = cfg.Context[contextName].Avs.Address
 		if avsAddress == "" {
 			return fmt.Errorf("AVS address not provided and not found in context")
 		}
@@ -404,14 +435,14 @@ func setReleaseMetadataURIAction(cCtx *cli.Context) error {
 	logger.Info("Metadata URI: %s", metadataURI)
 
 	// Get L1 chain config
-	envCtx, ok := cfg.Context[devnet.DEVNET_CONTEXT]
+	envCtx, ok := cfg.Context[contextName]
 	if !ok {
-		return fmt.Errorf("context '%s' not found in configuration", devnet.DEVNET_CONTEXT)
+		return fmt.Errorf("context '%s' not found in configuration", contextName)
 	}
 
 	l1Cfg, ok := envCtx.Chains[devnet.L1]
 	if !ok {
-		return fmt.Errorf("failed to get l1 chain config for context '%s'", devnet.DEVNET_CONTEXT)
+		return fmt.Errorf("failed to get l1 chain config for context '%s'", contextName)
 	}
 
 	// Connect to L1
@@ -502,9 +533,9 @@ func parseOperatorSetMapping(jsonOutput string) (map[string]OperatorSetRelease, 
 }
 
 // updateContextWithDigest updates the context YAML file with the digest after successful release
-func updateContextWithDigest(digest string) error {
+func updateContextWithDigest(contextName, digest string) error {
 	// Load the context yaml file
-	contextPath := filepath.Join("config", "contexts", "devnet.yaml") // TODO: make context configurable
+	contextPath := filepath.Join("config", "contexts", fmt.Sprintf("%s.yaml", contextName))
 	contextNode, err := common.LoadYAML(contextPath)
 	if err != nil {
 		return fmt.Errorf("failed to load context yaml: %w", err)
@@ -539,11 +570,18 @@ func updateContextWithDigest(digest string) error {
 }
 
 // updateContextWithVersion updates the context YAML file with the new version
-func updateContextWithVersion(version string) error {
+func updateContextWithVersion(contextName, version string) error {
 	// Load the context yaml file
-	yamlPath, rootNode, contextNode, err := common.LoadContext(devnet.DEVNET_CONTEXT)
+	var yamlPath string
+	var rootNode, contextNode *yaml.Node
+	var err error
+	if contextName == "" {
+		yamlPath, rootNode, contextNode, _, err = common.LoadDefaultContext()
+	} else {
+		yamlPath, rootNode, contextNode, _, err = common.LoadContext(contextName)
+	}
 	if err != nil {
-		return err
+		return fmt.Errorf("context loading failed: %w", err)
 	}
 
 	// Get or create artifact section

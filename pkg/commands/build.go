@@ -7,7 +7,6 @@ import (
 	"github.com/Layr-Labs/devkit-cli/config/configs"
 	"github.com/Layr-Labs/devkit-cli/config/contexts"
 	"github.com/Layr-Labs/devkit-cli/pkg/common"
-	"github.com/Layr-Labs/devkit-cli/pkg/testutils"
 	"gopkg.in/yaml.v3"
 
 	"github.com/urfave/cli/v2"
@@ -20,8 +19,7 @@ var BuildCommand = &cli.Command{
 	Flags: append([]cli.Flag{
 		&cli.StringFlag{
 			Name:  "context",
-			Usage: "devnet ,testnet or mainnet",
-			Value: "devnet",
+			Usage: "Select the context to use in this command (devnet, testnet or mainnet)",
 		},
 	}, common.GlobalFlags...),
 	Action: func(cCtx *cli.Context) error {
@@ -51,24 +49,21 @@ var BuildCommand = &cli.Command{
 		// Get the config (based on if we're in a test or not)
 		var cfg *common.ConfigWithContextConfig
 
-		// First check if config is in context (for testing)
-		if cfgValue := cCtx.Context.Value(testutils.ConfigContextKey); cfgValue != nil {
-			// Use test config from context
-			cfg = cfgValue.(*common.ConfigWithContextConfig)
-		} else {
-			// Load selected context
-			context := cCtx.String("context")
+		// Load selected context
+		contextName := cCtx.String("context")
 
-			// Load from file if not in context
-			var err error
-			cfg, err = common.LoadConfigWithContextConfig(context)
-			if err != nil {
-				return err
-			}
+		// Load config according to provided contextName
+		if contextName == "" {
+			cfg, contextName, err = common.LoadDefaultConfigWithContextConfig()
+		} else {
+			cfg, contextName, err = common.LoadConfigWithContextConfig(contextName)
+		}
+		if err != nil {
+			return fmt.Errorf("failed to load configurations: %w", err)
 		}
 
 		// Handle version increment
-		version := cfg.Context["devnet"].Artifact.Version
+		version := cfg.Context[contextName].Artifact.Version
 		if version == "" {
 			version = "0"
 		}
@@ -92,7 +87,7 @@ var BuildCommand = &cli.Command{
 		}
 
 		// Load the context yaml file
-		contextPath := filepath.Join("config", "contexts", fmt.Sprintf("%s.yaml", cCtx.String("context")))
+		contextPath := filepath.Join("config", "contexts", fmt.Sprintf("%s.yaml", contextName))
 		contextNode, err := common.LoadYAML(contextPath)
 		if err != nil {
 			return fmt.Errorf("failed to load context yaml: %w", err)
