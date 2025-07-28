@@ -126,9 +126,9 @@ var ReleaseCommand = &cli.Command{
 					Usage: "Select the context to use in this command (devnet, testnet or mainnet)",
 				},
 				&cli.Int64Flag{
-					Name:     "upgrade-by-time",
-					Usage:    "Unix timestamp by which the upgrade must be completed",
-					Required: true,
+					Name:        "upgrade-by-time",
+					Usage:       "Unix timestamp by which the upgrade must be completed",
+					DefaultText: "current time + 1 hour",
 				},
 				&cli.StringFlag{
 					Name:  "registry",
@@ -209,6 +209,11 @@ func publishReleaseAction(cCtx *cli.Context) error {
 	contextName := cCtx.String("context")
 	upgradeByTime := cCtx.Int64("upgrade-by-time")
 	registry := cCtx.String("registry")
+
+	// Set default upgrade-by-time if not provided (0 value)
+	if upgradeByTime == 0 {
+		upgradeByTime = time.Now().Add(time.Hour).Unix()
+	}
 
 	// Get build artifact from context first to read registry URL and version
 	cfg, err := common.LoadConfigWithContextConfig(contextName)
