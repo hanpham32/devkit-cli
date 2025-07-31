@@ -19,12 +19,14 @@ type L1ZeusAddressData struct {
 	KeyRegistrar         string `json:"keyRegistrar"`
 	ReleaseManager       string `json:"releaseManager"`
 	OperatorTableUpdater string `json:"operatorTableUpdater"`
+	TaskMailbox          string `json:"taskMailbox"`
 }
 
 type L2ZeusAddressData struct {
 	OperatorTableUpdater     string `json:"operatorTableUpdater"`
 	ECDSACertificateVerifier string `json:"ecdsaCertificateVerifier"`
 	BN254CertificateVerifier string `json:"bn254CertificateVerifier"`
+	TaskMailbox              string `json:"taskMailbox"`
 }
 
 // GetZeusAddresses runs the zeus env show mainnet command and extracts core EigenLayer addresses
@@ -110,6 +112,13 @@ func GetZeusAddresses(ctx context.Context, logger iface.Logger) (*L1ZeusAddressD
 		}
 	}
 
+	// Get TaskMailbox address
+	if val, ok := l1ZeusData["ZEUS_DEPLOYED_TaskMailbox_Proxy"]; ok {
+		if strVal, ok := val.(string); ok {
+			l1Addresses.TaskMailbox = strVal
+		}
+	}
+
 	// Verify we have both addresses
 	if l1Addresses.AllocationManager == "" || l1Addresses.DelegationManager == "" || l1Addresses.StrategyManager == "" || l1Addresses.CrossChainRegistry == "" || l1Addresses.KeyRegistrar == "" || l1Addresses.ReleaseManager == "" || l1Addresses.OperatorTableUpdater == "" {
 		logger.Warn("failed to extract required addresses from zeus output")
@@ -134,6 +143,13 @@ func GetZeusAddresses(ctx context.Context, logger iface.Logger) (*L1ZeusAddressD
 	if val, ok := l2ZeusData["ZEUS_DEPLOYED_BN254CertificateVerifier_Proxy"]; ok {
 		if strVal, ok := val.(string); ok {
 			l2Addresses.BN254CertificateVerifier = strVal
+		}
+	}
+
+	// Get TaskMailbox address
+	if val, ok := l2ZeusData["ZEUS_DEPLOYED_TaskMailbox_Proxy"]; ok {
+		if strVal, ok := val.(string); ok {
+			l2Addresses.TaskMailbox = strVal
 		}
 	}
 
@@ -212,6 +228,8 @@ func UpdateContextWithZeusAddresses(context context.Context, logger iface.Logger
 	releaseManagerVal := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: l1Addresses.ReleaseManager}
 	operatorTableUpdaterKey := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "operator_table_updater"}
 	operatorTableUpdaterVal := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: l1Addresses.OperatorTableUpdater}
+	taskMailboxKey := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "task_mailbox"}
+	taskMailboxVal := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: l1Addresses.TaskMailbox}
 
 	// Replace existing or append new entries in l1 section
 	SetMappingValue(l1Map, allocationManagerKey, allocationManagerVal)
@@ -221,6 +239,7 @@ func UpdateContextWithZeusAddresses(context context.Context, logger iface.Logger
 	SetMappingValue(l1Map, keyRegistrarKey, keyRegistrarVal)
 	SetMappingValue(l1Map, releaseManagerKey, releaseManagerVal)
 	SetMappingValue(l1Map, operatorTableUpdaterKey, operatorTableUpdaterVal)
+	SetMappingValue(l1Map, taskMailboxKey, taskMailboxVal)
 
 	// Find or create "l2" mapping entry under eigenlayer
 	l2Map := GetChildByKey(parentMap, "l2")
@@ -239,11 +258,14 @@ func UpdateContextWithZeusAddresses(context context.Context, logger iface.Logger
 	l2ECDSACertificateVerifierVal := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: l2Addresses.ECDSACertificateVerifier}
 	bn254Key := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "bn254_certificate_verifier"}
 	bn254Val := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: l2Addresses.BN254CertificateVerifier}
+	l2TaskMailboxKey := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "task_mailbox"}
+	l2TaskMailboxVal := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: l2Addresses.TaskMailbox}
 
 	// Replace existing or append new entries in l2 section
 	SetMappingValue(l2Map, l2OperatorTableUpdaterKey, l2OperatorTableUpdaterVal)
 	SetMappingValue(l2Map, l2ECDSACertificateVerifierKey, l2ECDSACertificateVerifierVal)
 	SetMappingValue(l2Map, bn254Key, bn254Val)
+	SetMappingValue(l2Map, l2TaskMailboxKey, l2TaskMailboxVal)
 
 	return nil
 }

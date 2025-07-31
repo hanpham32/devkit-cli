@@ -39,9 +39,10 @@ type ContractCaller struct {
 	keyRegistrarAddr       common.Address
 	crossChainRegistryAddr common.Address
 	releaseManagerAddr     common.Address
+	certVerifier           common.Address
 }
 
-func NewContractCaller(privateKeyHex string, chainID *big.Int, client *ethclient.Client, allocationManagerAddr, delegationManagerAddr, strategyManagerAddr, keyRegistrarAddr common.Address, crossChainRegistryAddr common.Address, releaseManagerAddr common.Address, logger iface.Logger) (*ContractCaller, error) {
+func NewContractCaller(privateKeyHex string, chainID *big.Int, client *ethclient.Client, allocationManagerAddr, delegationManagerAddr, strategyManagerAddr, keyRegistrarAddr, crossChainRegistryAddr, releaseManagerAddr, certVerifierAddr common.Address, logger iface.Logger) (*ContractCaller, error) {
 	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(privateKeyHex, "0x"))
 	if err != nil {
 		return nil, fmt.Errorf("invalid private key: %w", err)
@@ -68,6 +69,7 @@ func NewContractCaller(privateKeyHex string, chainID *big.Int, client *ethclient
 		keyRegistrarAddr:       keyRegistrarAddr,
 		crossChainRegistryAddr: crossChainRegistryAddr,
 		releaseManagerAddr:     releaseManagerAddr,
+		certVerifier:           certVerifierAddr,
 	}, nil
 }
 
@@ -173,6 +175,29 @@ func (cc *ContractCaller) CreateOperatorSets(ctx context.Context, avsAddress com
 		return fmt.Errorf("failed to get AllocationManager: %w", err)
 	}
 
+	// Filter out existing operator sets
+	var filteredParams []allocationmanager.IAllocationManagerTypesCreateSetParams
+	for _, param := range createSetParams {
+		opSet := allocationmanager.OperatorSet{
+			Avs: avsAddress,
+			Id:  param.OperatorSetId,
+		}
+		exists, err := allocationManager.IsOperatorSet(nil, opSet)
+		if err != nil {
+			return fmt.Errorf("failed to check operator set %d: %w", param.OperatorSetId, err)
+		}
+		if exists {
+			cc.logger.Info("Operator set %d already exists, skipping", param.OperatorSetId)
+			continue
+		}
+		filteredParams = append(filteredParams, param)
+	}
+
+	if len(filteredParams) == 0 {
+		cc.logger.Info("All operator sets already exist. Skipping creation.")
+		return nil
+	}
+
 	err = cc.SendAndWaitForTransaction(ctx, "CreateOperatorSets", func() (*types.Transaction, error) {
 		tx, err := allocationManager.CreateOperatorSets(opts, avsAddress, createSetParams)
 		if err == nil && tx != nil {
@@ -182,7 +207,7 @@ func (cc *ContractCaller) CreateOperatorSets(ctx context.Context, avsAddress com
 					"createSetParams: %v",
 				tx.Hash().Hex(),
 				avsAddress,
-				createSetParams,
+				filteredParams,
 			)
 		}
 		return tx, err
@@ -532,6 +557,20 @@ func (cc *ContractCaller) ConfigureOpSetCurveType(ctx context.Context, avsAddres
 		return fmt.Errorf("failed to get KeyRegistrar: %w", err)
 	}
 
+	// End early if operatorSet is already configured with curveType
+	opSet := keyregistrar.OperatorSet{
+		Avs: avsAddress,
+		Id:  opSetId,
+	}
+	currentCurveType, err := keyRegistrar.GetOperatorSetCurveType(nil, opSet)
+	if err != nil {
+		return fmt.Errorf("failed to check operator set %d: %w", opSetId, err)
+	}
+	if currentCurveType == curveType {
+		cc.logger.Info("Operator set %d already confirgured with curveType, skipping", opSetId)
+		return nil
+	}
+
 	operatorSet := keyregistrar.OperatorSet{Avs: avsAddress, Id: opSetId}
 	err = cc.SendAndWaitForTransaction(ctx, "ConfigureOpSetCurveType", func() (*types.Transaction, error) {
 		tx, err := keyRegistrar.ConfigureOperatorSet(opts, operatorSet, curveType)
@@ -554,16 +593,26 @@ func (cc *ContractCaller) CreateGenerationReservation(ctx context.Context, opSet
 	cc.logger.Info("Operator table calculator: %s", operatorTableCalculator.Hex())
 	cc.logger.Info("AVS address: %s", avsAddress.Hex())
 
+	reservations, err := crossChainRegistry.GetActiveGenerationReservations(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return fmt.Errorf("failed to fetch active generation reservations: %w", err)
+	}
+
+	for _, r := range reservations {
+		if r.Avs == avsAddress && r.Id == opSetId {
+			cc.logger.Info("Generation reservation already exists for AVS %s and ID %d, skipping", avsAddress.Hex(), opSetId)
+			return nil
+		}
+	}
+
 	operatorSet := crosschainregistry.OperatorSet{Avs: avsAddress, Id: opSetId}
 	operatorSetConfig := crosschainregistry.ICrossChainRegistryTypesOperatorSetConfig{
 		Owner:              avsAddress,
 		MaxStalenessPeriod: 66666666,
 	}
 
-	// add 31337 to chainids
-	chainIds := []*big.Int{big.NewInt(int64(cc.chainID.Int64()))}
 	err = cc.SendAndWaitForTransaction(ctx, "CreateGenerationReservation", func() (*types.Transaction, error) {
-		tx, err := crossChainRegistry.CreateGenerationReservation(opts, operatorSet, operatorTableCalculator, operatorSetConfig, chainIds)
+		tx, err := crossChainRegistry.CreateGenerationReservation(opts, operatorSet, operatorTableCalculator, operatorSetConfig)
 		return tx, err
 	})
 	return err

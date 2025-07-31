@@ -15,7 +15,6 @@ import (
 
 	"github.com/Layr-Labs/devkit-cli/pkg/common"
 	"github.com/Layr-Labs/devkit-cli/pkg/common/artifact"
-	"github.com/Layr-Labs/devkit-cli/pkg/common/devnet"
 	"github.com/Layr-Labs/devkit-cli/pkg/common/iface"
 	releasemanager "github.com/Layr-Labs/eigenlayer-contracts/pkg/bindings/ReleaseManager"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -263,7 +262,7 @@ func checkMetadataURIExists(logger iface.Logger, contextName string, cfg *common
 		return fmt.Errorf("context '%s' not found in configuration", contextName)
 	}
 
-	l1Cfg, ok := envCtx.Chains[devnet.L1]
+	l1Cfg, ok := envCtx.Chains[common.L1]
 	if !ok {
 		return fmt.Errorf("failed to get l1 chain config for context '%s'", contextName)
 	}
@@ -283,7 +282,7 @@ func checkMetadataURIExists(logger iface.Logger, contextName string, cfg *common
 	avsPrivateKey = strings.TrimPrefix(avsPrivateKey, "0x")
 
 	// Get contract addresses
-	_, _, _, _, _, _, releaseManagerAddress := devnet.GetEigenLayerAddresses(cfg)
+	_, _, _, _, _, _, releaseManagerAddress := common.GetEigenLayerAddresses(contextName, cfg)
 
 	// Create contract caller
 	contractCaller, err := common.NewContractCaller(
@@ -296,6 +295,7 @@ func checkMetadataURIExists(logger iface.Logger, contextName string, cfg *common
 		ethcommon.HexToAddress(""),
 		ethcommon.HexToAddress(""),
 		ethcommon.HexToAddress(releaseManagerAddress),
+		ethcommon.HexToAddress(""),
 		logger,
 	)
 	if err != nil {
@@ -352,7 +352,7 @@ func publishReleaseToReleaseManagerAction(
 		return fmt.Errorf("context '%s' not found in configuration", contextName)
 	}
 
-	l1Cfg, ok := envCtx.Chains[devnet.L1]
+	l1Cfg, ok := envCtx.Chains[common.L1]
 	if !ok {
 		return fmt.Errorf("failed to get l1 chain config for context '%s'", contextName)
 	}
@@ -369,7 +369,7 @@ func publishReleaseToReleaseManagerAction(
 	}
 	// Trim 0x
 	avsPrivateKey = strings.TrimPrefix(avsPrivateKey, "0x")
-	_, _, _, _, _, _, releaseManagerAddress := devnet.GetEigenLayerAddresses(cfg)
+	_, _, _, _, _, _, releaseManagerAddress := common.GetEigenLayerAddresses(contextName, cfg)
 
 	contractCaller, err := common.NewContractCaller(
 		avsPrivateKey,
@@ -381,6 +381,7 @@ func publishReleaseToReleaseManagerAction(
 		ethcommon.HexToAddress(""),
 		ethcommon.HexToAddress(""),
 		ethcommon.HexToAddress(releaseManagerAddress),
+		ethcommon.HexToAddress(""),
 		logger,
 	)
 	if err != nil {
@@ -440,7 +441,7 @@ func setReleaseMetadataURIAction(cCtx *cli.Context) error {
 		return fmt.Errorf("context '%s' not found in configuration", contextName)
 	}
 
-	l1Cfg, ok := envCtx.Chains[devnet.L1]
+	l1Cfg, ok := envCtx.Chains[common.L1]
 	if !ok {
 		return fmt.Errorf("failed to get l1 chain config for context '%s'", contextName)
 	}
@@ -460,7 +461,7 @@ func setReleaseMetadataURIAction(cCtx *cli.Context) error {
 	avsPrivateKey = strings.TrimPrefix(avsPrivateKey, "0x")
 
 	// Get contract addresses
-	_, _, _, _, _, _, releaseManagerAddress := devnet.GetEigenLayerAddresses(cfg)
+	_, _, _, _, _, _, releaseManagerAddress := common.GetEigenLayerAddresses(contextName, cfg)
 
 	// Create contract caller
 	contractCaller, err := common.NewContractCaller(
@@ -473,6 +474,7 @@ func setReleaseMetadataURIAction(cCtx *cli.Context) error {
 		ethcommon.HexToAddress(""),
 		ethcommon.HexToAddress(""),
 		ethcommon.HexToAddress(releaseManagerAddress),
+		ethcommon.HexToAddress(""),
 		logger,
 	)
 	if err != nil {
