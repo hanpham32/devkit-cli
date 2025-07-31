@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/Layr-Labs/devkit-cli/pkg/common"
+	"github.com/Layr-Labs/devkit-cli/pkg/common/devnet"
 
 	"github.com/urfave/cli/v2"
 )
@@ -29,6 +30,26 @@ func AVSRun(cCtx *cli.Context) error {
 	// Get logger
 	logger := common.LoggerFromContext(cCtx.Context)
 
+	// Check for flagged contextName
+	contextName := cCtx.String("context")
+
+	// Set path for context yaml
+	var err error
+	var contextJSON []byte
+	if contextName == "" {
+		contextJSON, contextName, err = common.LoadDefaultRawContext()
+	} else {
+		contextJSON, contextName, err = common.LoadRawContext(contextName)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to load context: %w", err)
+	}
+
+	// Prevent runs when context is not devnet
+	if contextName != devnet.DEVNET_CONTEXT {
+		return fmt.Errorf("run failed: `devkit avs run` only available on devnet - please run `devkit avs run --context devnet`")
+	}
+
 	// Print task if verbose
 	logger.Debug("Starting offchain AVS components...")
 
@@ -38,21 +59,6 @@ func AVSRun(cCtx *cli.Context) error {
 
 	// Set path for .devkit scripts
 	scriptPath := filepath.Join(".devkit", "scripts", "run")
-
-	// Check for flagged contextName
-	contextName := cCtx.String("context")
-
-	// Set path for context yaml
-	var err error
-	var contextJSON []byte
-	if contextName == "" {
-		contextJSON, _, err = common.LoadDefaultRawContext()
-	} else {
-		contextJSON, _, err = common.LoadRawContext(contextName)
-	}
-	if err != nil {
-		return fmt.Errorf("failed to load context: %w", err)
-	}
 
 	// Run init on the template init script
 	if _, err := common.CallTemplateScript(cCtx.Context, logger, dir, scriptPath, common.ExpectNonJSONResponse, contextJSON); err != nil {
