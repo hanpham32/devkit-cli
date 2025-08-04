@@ -14,4 +14,4 @@ architectures:
     languages:
       ts:
         baseUrl: "https://github.com/Layr-Labs/tee-avs-template"
-        version: "ts-app"
+        version: "master"
