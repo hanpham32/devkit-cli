@@ -52,7 +52,7 @@ git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$TEMP_DIR"
 
 echo "Building DevKit..."
 cd "$TEMP_DIR"
-make build
+TELEMETRY_TOKEN="phc_BiKfywNft5iBI8N7MxmuVCkb4GGZj4mDFXYPmOPUAI8" make build
 
 echo "Installing DevKit to $INSTALL_DIR..."
 if [[ "$INSTALL_DIR" == "/usr/local/bin" ]]; then
