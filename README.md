@@ -27,16 +27,16 @@ curl -fsSL https://raw.githubusercontent.com/Layr-Labs/devkit-cli/main/install-d
 Download the binary for your platform:
 ```bash
 # macOS (Apple Silicon)
-mkdir -p $HOME/bin && curl -sL https://s3.amazonaws.com/eigenlayer-devkit-releases/v0.0.10/devkit-darwin-arm64-v0.0.10.tar.gz | tar xz -C "$HOME/bin"
+mkdir -p $HOME/bin && curl -sL https://s3.amazonaws.com/eigenlayer-devkit-releases/v0.1.0-preview.2.rc/devkit-darwin-arm64-v0.1.0-preview.2.rc.tar.gz | tar xz -C "$HOME/bin"
 
 # macOS (Intel)
-mkdir -p $HOME/bin && curl -sL https://s3.amazonaws.com/eigenlayer-devkit-releases/v0.0.10/devkit-darwin-amd64-v0.0.10.tar.gz | tar xz -C "$HOME/bin"
+mkdir -p $HOME/bin && curl -sL https://s3.amazonaws.com/eigenlayer-devkit-releases/v0.1.0-preview.2.rc/devkit-darwin-amd64-v0.1.0-preview.2.rc.tar.gz | tar xz -C "$HOME/bin"
 
 # Linux (x86_64 / AMD64)
-mkdir -p $HOME/bin && curl -sL https://s3.amazonaws.com/eigenlayer-devkit-releases/v0.0.10/devkit-linux-amd64-v0.0.10.tar.gz | tar xz -C "$HOME/bin"
+mkdir -p $HOME/bin && curl -sL https://s3.amazonaws.com/eigenlayer-devkit-releases/v0.1.0-preview.2.rc/devkit-linux-amd64-v0.1.0-preview.2.rc.tar.gz | tar xz -C "$HOME/bin"
 
 # Linux (ARM64 / aarch64)
-mkdir -p $HOME/bin && curl -sL https://s3.amazonaws.com/eigenlayer-devkit-releases/v0.0.10/devkit-linux-arm64-v0.0.10.tar.gz | tar xz -C "$HOME/bin"
+mkdir -p $HOME/bin && curl -sL https://s3.amazonaws.com/eigenlayer-devkit-releases/v0.1.0-preview.2.rc/devkit-linux-arm64-v0.1.0-preview.2.rc.tar.gz | tar xz -C "$HOME/bin"
 ```
 
 Add to your PATH:
@@ -521,6 +521,60 @@ devkit avs build --verbose
 ```
 
 ---
+
+## Deploying to Testnet (v0.1.0+)
+
+As of **v0.1.0**, DevKit supports deploying AVS contracts to public testnets. This is the next step after local development and testing.
+
+### Create a Testnet Context
+
+You must create a separate context for your testnet deployment:
+
+```bash
+devkit avs context create --context testnet
+```
+
+Set it as the active context:
+
+```bash
+devkit avs config --set project.context="testnet"
+```
+
+Edit the testnet configuration to set RPC endpoints, keys, and other environment details:
+
+```bash
+devkit avs context --edit --context testnet
+```
+
+> **Tip:**  
+> Use reliable archive RPC endpoints for both L1 and L2 chains. Configure private keys for deployment wallets in the testnet context file or via `.env` for security.
+
+---
+
+### Deploy AVS Contracts to Testnet
+
+Once the `testnet` context is configured and active, you can deploy to each chain:
+
+- **Deploy L1 contracts**:
+```bash
+devkit avs deploy contracts l1
+```
+
+- **Deploy L2 contracts**:
+```bash
+devkit avs deploy contracts l2
+```
+
+> Both commands will use the RPC URLs and keys from your active context.
+
+---
+
+### Next Steps After Deployment
+- Verify contract addresses in your testnet context file.
+- Register operators and run your AVS offchain services pointing to the testnet.
+- Optionally, publish a release for operators using `devkit avs release publish`.
+
+
 ## Upgrade Process
 
 

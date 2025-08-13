@@ -199,7 +199,7 @@ func (cc *ContractCaller) CreateOperatorSets(ctx context.Context, avsAddress com
 	}
 
 	err = cc.SendAndWaitForTransaction(ctx, "CreateOperatorSets", func() (*types.Transaction, error) {
-		tx, err := allocationManager.CreateOperatorSets(opts, avsAddress, createSetParams)
+		tx, err := allocationManager.CreateOperatorSets(opts, avsAddress, filteredParams)
 		if err == nil && tx != nil {
 			cc.logger.Debug(
 				"Transaction hash for CreateOperatorSets: %s\n"+
@@ -225,6 +225,16 @@ func (cc *ContractCaller) RegisterAsOperator(ctx context.Context, operatorAddres
 	delegationManager, err := cc.registry.GetDelegationManager(cc.delegationManagerAddr)
 	if err != nil {
 		return fmt.Errorf("failed to get DelegationManager: %w", err)
+	}
+
+	exists, err := delegationManager.IsOperator(nil, operatorAddress)
+	if err != nil {
+		return fmt.Errorf("failed to check operator exists %d: %w", operatorAddress, err)
+	}
+
+	if exists {
+		cc.logger.Info("Operator '%s' already registered, skipping", operatorAddress)
+		return nil
 	}
 
 	err = cc.SendAndWaitForTransaction(ctx, fmt.Sprintf("RegisterAsOperator for %s", operatorAddress.Hex()), func() (*types.Transaction, error) {
@@ -743,7 +753,19 @@ func (cc *ContractCaller) RegisterKeyInKeyRegistrar(ctx context.Context, operato
 	if err != nil {
 		return fmt.Errorf("signature not in correct subgroup: %w", err)
 	}
+
 	operatorSet := keyregistrar.OperatorSet{Avs: avsAddress, Id: opSetId}
+
+	exists, err := keyRegistrar.IsRegistered(nil, operatorSet, operatorAddress)
+	if err != nil {
+		return fmt.Errorf("failed to check operator (%d) is registered: %w", operatorAddress, err)
+	}
+
+	if exists {
+		cc.logger.Info("Operator '%s' already registered for operatorSet '%d' and AVS '%s', skipping", operatorAddress, opSetId, avsAddress)
+		return nil
+	}
+
 	err = cc.SendAndWaitForTransaction(ctx, "RegisterKeyInKeyRegistrar", func() (*types.Transaction, error) {
 		tx, err := keyRegistrar.RegisterKey(opts, operatorAddress, operatorSet, keyData, g1Bytes)
 		return tx, err
