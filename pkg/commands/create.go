@@ -39,9 +39,9 @@ var CreateCommand = &cli.Command{
 			Value: "go",
 		},
 		&cli.StringFlag{
-			Name:  "arch",
+			Name:  "template",
 			Usage: "Specifies AVS architecture (task-based/hourglass, epoch-based, etc.)",
-			Value: "task",
+			Value: "hourglass",
 		},
 		&cli.StringFlag{
 			Name:  "template-url",
@@ -70,8 +70,7 @@ var CreateCommand = &cli.Command{
 		dest := cCtx.Args().Get(1)
 
 		// get logger
-		logger := common.LoggerFromContext(cCtx.Context)
-		tracker := common.ProgressTrackerFromContext(cCtx.Context)
+		logger, tracker := common.GetLoggerFromCLIContext(cCtx)
 
 		// use dest from dir flag or positional
 		var targetDir string
@@ -90,15 +89,15 @@ var CreateCommand = &cli.Command{
 		// in verbose mode, detail the situation
 		logger.Debug("Creating new AVS project: %s", projectName)
 		logger.Debug("Directory: %s", cCtx.String("dir"))
+		logger.Debug("Template: %s", cCtx.String("template"))
 		logger.Debug("Language: %s", cCtx.String("lang"))
-		logger.Debug("Architecture: %s", cCtx.String("arch"))
 		logger.Debug("Environment: %s", cCtx.String("env"))
 		if cCtx.String("template-path") != "" {
 			logger.Debug("Template Path: %s", cCtx.String("template-path"))
 		}
 
 		// Get template URLs
-		mainBaseURL, mainVersion, err := getTemplateURLs(cCtx)
+		mainBaseURL, mainVersion, mainLang, err := getTemplateURLs(cCtx)
 		if err != nil {
 			return err
 		}
@@ -149,7 +148,7 @@ var CreateCommand = &cli.Command{
 		logger.Info("Installing template dependencies\n\n")
 
 		// Run init on the template init script
-		if _, err = common.CallTemplateScript(cCtx.Context, logger, targetDir, scriptPath, common.ExpectNonJSONResponse, nil); err != nil {
+		if _, err = common.CallTemplateScript(cCtx.Context, logger, targetDir, scriptPath, common.ExpectNonJSONResponse, []byte(mainLang)); err != nil {
 			return fmt.Errorf("failed to initialize %s: %w", scriptPath, err)
 		}
 
@@ -187,7 +186,7 @@ var CreateCommand = &cli.Command{
 		}
 
 		// Copy config.yaml to the project directory with UUID and telemetry settings
-		if err := copyDefaultConfigToProject(logger, targetDir, projectName, appEnv.ProjectUUID, mainBaseURL, mainVersion, telemetryEnabled); err != nil {
+		if err := copyDefaultConfigToProject(logger, targetDir, projectName, appEnv.ProjectUUID, mainBaseURL, mainVersion, mainLang, telemetryEnabled); err != nil {
 			return fmt.Errorf("failed to initialize %s: %w", common.BaseConfig, err)
 		}
 
@@ -211,35 +210,30 @@ var CreateCommand = &cli.Command{
 	},
 }
 
-func getTemplateURLs(cCtx *cli.Context) (string, string, error) {
-	templateBaseOverride := cCtx.String("template-url")
-	templateVersionOverride := cCtx.String("template-version")
-
-	cfg, err := template.LoadConfig()
-	if err != nil {
-		return "", "", fmt.Errorf("failed to load templates cfg: %w", err)
-	}
-
-	arch := cCtx.String("arch")
+func getTemplateURLs(cCtx *cli.Context) (string, string, string, error) {
+	baseURL := cCtx.String("template-url")
+	version := cCtx.String("template-version")
 	lang := cCtx.String("lang")
 
-	mainBaseURL, mainVersion, err := template.GetTemplateURLs(cfg, arch, lang)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to get template URLs: %w", err)
-	}
-	if templateBaseOverride != "" {
-		mainBaseURL = templateBaseOverride
-	}
-	if mainBaseURL == "" {
-		return "", "", fmt.Errorf("no template found for architecture %s and language %s", arch, lang)
+	// If no overrides provided, get from config
+	if baseURL == "" && version == "" {
+		cfg, err := template.LoadConfig()
+		if err != nil {
+			return "", "", "", fmt.Errorf("failed to load templates cfg: %w", err)
+		}
+
+		selectedTemplate := cCtx.String("template")
+		baseURL, version, err = template.GetTemplateURLs(cfg, selectedTemplate, lang)
+		if err != nil {
+			return "", "", "", fmt.Errorf("failed to get template URLs: %w", err)
+		}
+
+		if baseURL == "" {
+			return "", "", "", fmt.Errorf("no template found for template %s and language %s", selectedTemplate, lang)
+		}
 	}
 
-	// If templateVersionOverride is provided, it takes precedence over the version from templates.yaml
-	if templateVersionOverride != "" {
-		mainVersion = templateVersionOverride
-	}
-
-	return mainBaseURL, mainVersion, nil
+	return baseURL, version, lang, nil
 }
 
 func createProjectDir(logger iface.Logger, targetDir string, overwrite bool) error {
@@ -264,7 +258,7 @@ func createProjectDir(logger iface.Logger, targetDir string, overwrite bool) err
 }
 
 // copyDefaultConfigToProject copies config to the project directory with updated project name, UUID, and telemetry settings
-func copyDefaultConfigToProject(logger iface.Logger, targetDir, projectName, projectUUID string, templateBaseURL, templateVersion string, telemetryEnabled bool) error {
+func copyDefaultConfigToProject(logger iface.Logger, targetDir, projectName, projectUUID string, templateBaseURL, templateVersion string, templatelanguage string, telemetryEnabled bool) error {
 	// Create and ensure target config directory exists
 	destConfigDir := filepath.Join(targetDir, "config")
 	if err := os.MkdirAll(destConfigDir, 0755); err != nil {
@@ -284,6 +278,7 @@ func copyDefaultConfigToProject(logger iface.Logger, targetDir, projectName, pro
 	cfg.Config.Project.TelemetryEnabled = telemetryEnabled
 	cfg.Config.Project.TemplateBaseURL = templateBaseURL
 	cfg.Config.Project.TemplateVersion = templateVersion
+	cfg.Config.Project.TemplateLanguage = templatelanguage
 
 	// Marshal the modified configuration back to YAML
 	newContentBytes, err := yaml.Marshal(&cfg)
