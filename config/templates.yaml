@@ -12,6 +12,12 @@ architectures:
         version: ""
   tee:
     languages:
+      rs:
+        baseUrl: "https://github.com/Layr-Labs/tee-avs-template"
+        version: "rust-app"
+      rust:
+        baseUrl: "https://github.com/Layr-Labs/tee-avs-template"
+        version: "rust-app"
       ts:
         baseUrl: "https://github.com/Layr-Labs/tee-avs-template"
         version: "master"
