@@ -12,6 +12,9 @@ architectures:
         version: ""
   tee:
     languages:
+      go:
+        baseUrl: "https://github.com/Layr-Labs/tee-avs-template"
+        version: "go-app"
       ts:
         baseUrl: "https://github.com/Layr-Labs/tee-avs-template"
         version: "master"
